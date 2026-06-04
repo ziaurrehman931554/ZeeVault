@@ -1,0 +1,55 @@
+{
+  "name": "video-vault",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on http://localhost:5173 && electron .",
+    "build": "vite build",
+    "build:electron": "tsc --ignoreConfig src/main.ts src/preload.ts --outDir dist-electron --target es2020 --module esnext --moduleResolution bundler --allowSyntheticDefaultImports --esModuleInterop",
+    "preview": "vite preview",
+    "pack": "electron-builder --publish never",
+    "dist": "npm run build && npm run build:electron && electron-builder"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.0",
+    "@types/node": "^25.9.1",
+    "@vitejs/plugin-react": "^6.0.2",
+    "autoprefixer": "^10.5.0",
+    "concurrently": "^9.2.1",
+    "electron": "^42.3.3",
+    "electron-builder": "^26.8.1",
+    "electron-is-dev": "^3.0.1",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.12",
+    "wait-on": "^7.0.0"
+  },
+  "dependencies": {
+    "@types/crypto-js": "^4.2.2",
+    "@types/react": "^18.3.30",
+    "@types/react-dom": "^18.3.7",
+    "@types/video.js": "^7.3.58",
+    "crypto-js": "^4.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsx": "^4.22.4",
+    "video.js": "^8.23.7",
+    "zustand": "^5.0.14"
+  },
+  "build": {
+    "appId": "com.videovault.app",
+    "productName": "Video Vault",
+    "files": [
+      "dist",
+      "dist-electron"
+    ],
+    "directories": {
+      "buildResources": "public"
+    }
+  }
+}
