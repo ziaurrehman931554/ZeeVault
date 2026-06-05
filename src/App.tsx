@@ -7,6 +7,7 @@ import VideoPlayer from './components/VideoPlayer';
 import LockScreen from './components/LockScreen';
 import { DecryptJob, NotificationItem, ThemeMode, VideoItem } from './types/index';
 import { CryptoService } from './services/cryptoService';
+import { createMseBlob } from './services/tsTransmuxer';
 
 const MAX_READY_CACHE = 20;
 
@@ -79,7 +80,8 @@ const App: React.FC = () => {
       const nextJobs = { ...jobs };
       const previous = nextJobs[videoName];
       if (previous?.url && previous.url !== readyJob.url) {
-        URL.revokeObjectURL(previous.url);
+        if (previous._cleanup) previous._cleanup();
+        else URL.revokeObjectURL(previous.url);
       }
 
       nextJobs[videoName] = readyJob;
@@ -90,7 +92,10 @@ const App: React.FC = () => {
         const oldestName = readyOrderRef.current.shift();
         if (!oldestName) break;
         const oldestJob = nextJobs[oldestName];
-        if (oldestJob?.url) URL.revokeObjectURL(oldestJob.url);
+        if (oldestJob?.url) {
+          if (oldestJob._cleanup) oldestJob._cleanup();
+          else URL.revokeObjectURL(oldestJob.url);
+        }
         delete nextJobs[oldestName];
       }
 
@@ -103,7 +108,13 @@ const App: React.FC = () => {
     (video: VideoItem, silent = false) => {
       updateDecryptJobs((jobs) => {
         const job = jobs[video.encryptedName];
-        if (job?.url) URL.revokeObjectURL(job.url);
+        if (job?.url) {
+          if (job._cleanup) {
+            job._cleanup();
+          } else {
+            URL.revokeObjectURL(job.url);
+          }
+        }
         readyOrderRef.current = readyOrderRef.current.filter(
           (name) => name !== video.encryptedName
         );
@@ -172,6 +183,33 @@ const App: React.FC = () => {
         decryptedBuffer.set(chunk, offset);
         offset += chunk.length;
       }
+      if (video.extension === 'ts') {
+        try {
+          const { url, cleanup } = await createMseBlob(decryptedBuffer);
+          updateDecryptJobs((jobs) =>
+            rememberReadyVideo(jobs, video.encryptedName, {
+              status: 'ready',
+              progress: 100,
+              url,
+              _cleanup: cleanup,
+            })
+          );
+          setIsDecrypting(false);
+          setDecryptProgress(100);
+          notify(`Ready to play: ${video.originalName}`, 'success');
+          return;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          updateDecryptJobs((jobs) => ({
+            ...jobs,
+            [video.encryptedName]: { status: 'error', progress: 0, error: msg },
+          }));
+          setIsDecrypting(false);
+          setDecryptProgress(0);
+          notify(`Could not play .ts file: ${msg}`, 'error');
+          return;
+        }
+      }
       const mimeType = CryptoService.getMimeType(video.originalName);
       const url = CryptoService.bufferToBlob(decryptedBuffer, mimeType);
 
@@ -221,7 +259,11 @@ const App: React.FC = () => {
 
       Object.entries(jobs).forEach(([name, job]) => {
         if (job.url) {
-          URL.revokeObjectURL(job.url);
+          if (job._cleanup) {
+            job._cleanup();
+          } else {
+            URL.revokeObjectURL(job.url);
+          }
           clearedCount++;
           return;
         }
@@ -280,7 +322,13 @@ const App: React.FC = () => {
   useEffect(() => {
     return () => {
       Object.values(decryptJobsRef.current).forEach((job) => {
-        if (job.url) URL.revokeObjectURL(job.url);
+        if (job.url) {
+          if (job._cleanup) {
+            job._cleanup();
+          } else {
+            URL.revokeObjectURL(job.url);
+          }
+        }
       });
     };
   }, []);

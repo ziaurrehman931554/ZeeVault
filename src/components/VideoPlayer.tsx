@@ -3,6 +3,7 @@ import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAppStore } from '../stores/appStore';
+import { CryptoService } from '../services/cryptoService';
 
 const VideoPlayer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -92,7 +93,7 @@ const VideoPlayer: React.FC = () => {
     if (videoUrl && playerRef.current) {
       playerRef.current.src({
         src: videoUrl,
-        type: currentVideo ? getVideoType(currentVideo.originalName) : 'video/mp4',
+        type: currentVideo ? CryptoService.getMimeType(currentVideo.originalName) : 'video/mp4',
       });
       playerRef.current.ready(() => {
         setShowTitle(true);
@@ -210,13 +211,6 @@ const VideoPlayer: React.FC = () => {
       </div>
     </div>
   );
-};
-
-const getVideoType = (filename: string): string => {
-  const extension = filename.toLowerCase().split('.').pop();
-  if (extension === 'mov') return 'video/quicktime';
-  if (extension === 'webm') return 'video/webm';
-  return 'video/mp4';
 };
 
 export default VideoPlayer;

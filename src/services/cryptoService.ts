@@ -131,9 +131,16 @@ export class CryptoService {
       webm: 'video/webm',
       mkv: 'video/x-matroska',
       avi: 'video/x-msvideo',
-      mov: 'video/quicktime',
+      mov: 'video/mp4',
       wmv: 'video/x-ms-wmv',
       ts: 'video/mp2t',
+      m4v: 'video/mp4',
+      mpeg: 'video/mpeg',
+      mpg: 'video/mpeg',
+      ogv: 'video/ogg',
+      ogx: 'video/ogg',
+      '3gp': 'video/3gpp',
+      flv: 'video/x-flv',
     };
     return mimeTypes[ext || ''] || 'video/mp4';
   }

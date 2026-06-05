@@ -30,6 +30,7 @@ export interface DecryptJob {
   progress: number;
   url?: string;
   error?: string;
+  _cleanup?: () => void;
 }
 
 export interface NotificationItem {
