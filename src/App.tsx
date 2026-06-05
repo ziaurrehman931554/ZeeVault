@@ -13,7 +13,7 @@ const MAX_READY_CACHE = 20;
 
 const App: React.FC = () => {
   const { currentScreen, password, browserFiles, isLocked, setLocked } = useAppStore();
-  const { setCurrentVideo, setIsDecrypting, setDecryptProgress, setVideoUrl } =
+  const { currentVideo, videoUrl, setCurrentVideo, setIsDecrypting, setDecryptProgress, setVideoUrl } =
     usePlayerStore();
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [decryptJobs, setDecryptJobs] = useState<Record<string, DecryptJob>>({});
@@ -367,7 +367,7 @@ const App: React.FC = () => {
           onClearAllCache={handleClearAllCache}
         />
       )}
-      {currentScreen === 'player' && <VideoPlayer />}
+      {currentScreen === 'player' && <VideoPlayer videoUrl={videoUrl} currentVideo={currentVideo} />}
     </div>
   );
 };
