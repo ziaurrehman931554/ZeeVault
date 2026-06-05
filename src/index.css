@@ -926,8 +926,8 @@ button:disabled {
   place-items: center;
   padding: 24px;
   background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
   opacity: 0;
   transition: opacity 0.35s ease;
 }
