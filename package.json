@@ -1,6 +1,8 @@
 {
-  "name": "video-vault",
+  "name": "zeevault",
   "version": "1.0.0",
+  "description": "An encrypted video locker app that securely stores, manages, and plays your personal video collection.",
+  "author": "ZeeVault",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
@@ -42,14 +44,22 @@
     "zustand": "^5.0.14"
   },
   "build": {
-    "appId": "com.videovault.app",
-    "productName": "Video Vault",
+    "appId": "com.zeevault.app",
+    "productName": "ZeeVault",
     "files": [
       "dist",
       "dist-electron"
     ],
     "directories": {
       "buildResources": "public"
+    },
+    "win": {
+      "icon": "ZeeVault.png"
+    },
+    "nsis": {
+      "installerIcon": "ZeeVault.ico",
+      "uninstallerIcon": "ZeeVault.ico",
+      "installerHeaderIcon": "ZeeVault.ico"
     }
   }
 }

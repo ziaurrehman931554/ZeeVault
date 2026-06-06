@@ -10,6 +10,8 @@ let mainWindow: BrowserWindow | null = null;
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
+    title: 'ZeeVault',
+    icon: path.join(__dirname, '../ZeeVault.png'),
     width: 1400,
     height: 900,
     minWidth: 1024,
