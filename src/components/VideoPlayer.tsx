@@ -41,13 +41,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
   const [showThinSeek, setShowThinSeek] = useState(false);
   const [previewTime, setPreviewTime] = useState<number | null>(null);
   const [previewX, setPreviewX] = useState(0);
-  const [statusInfo, setStatusInfo] = useState<{ icon: string; text: string } | null>(null);
+  const [statusInfo, setStatusInfo] = useState<{ icon: string; text: string; key: number } | null>(null);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const statusKeyRef = useRef(0);
 
   const { setCurrentScreen } = useAppStore();
 
   const showStatusInfo = useCallback((icon: string, text: string) => {
-    setStatusInfo({ icon, text });
+    statusKeyRef.current += 1;
+    setStatusInfo({ icon, text, key: statusKeyRef.current });
     if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
     statusTimerRef.current = setTimeout(() => setStatusInfo(null), 1200);
   }, []);
@@ -318,11 +320,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
   }, [togglePlay, skip, toggleMute, toggleFullscreen, playbackRate, handleSpeedChange, handleVolumeChange, volume, setCurrentScreen, showSettings, showVolumeSlider]);
 
   const volumeIcon = useMemo(() => {
-    const v = isMuted ? 0 : volume;
-    if (v === 0) {
-      return <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.5v5a4.47 4.47 0 002.5-1.5zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />;
+    if (isMuted) {
+      return (
+        <g>
+          <path d="M3 9v6h4l5 5V4L7 9H3z" />
+          <path d="M18 7l-8 10M10 7l8 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </g>
+      );
     }
-    if (v < 0.5) {
+    if (volume === 0) {
+      return <path d="M3 9v6h4l5 5V4L7 9H3z" />;
+    }
+    if (volume < 0.5) {
       return <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.5v5a4.47 4.47 0 002.5-1.5z" />;
     }
     return <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.5v5a4.47 4.47 0 002.5-1.5zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />;
@@ -479,11 +488,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
       </div>
 
       {statusInfo && (
-        <div className="status-indicator">
+        <div className="status-indicator" key={statusInfo.key}>
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             {statusInfo.icon === 'play' && <path d="M8 5v14l11-7z" />}
             {statusInfo.icon === 'pause' && <><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></>}
-            {statusInfo.icon === 'mute' && <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.5v5a4.47 4.47 0 002.5-1.5zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />}
+            {statusInfo.icon === 'mute' && <><path d="M3 9v6h4l5 5V4L7 9H3z" /><path d="M18 7l-8 10M10 7l8 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></>}
             {statusInfo.icon === 'unmute' && <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.5v5a4.47 4.47 0 002.5-1.5z" />}
             {statusInfo.icon === 'forward' && <path d="M11.5 8c2.65 0 4.05.99 5.5 2.17L19.5 8v6h-6l2.67-2.22C16.17 10.22 14.85 9.5 13 9.5c-2.54 0-4.42 1.58-5.5 3.5l-1.5-.75C7.5 9.75 9.85 8 11.5 8z" />}
             {statusInfo.icon === 'backward' && <path d="M12.5 8c-2.65 0-4.05.99-5.5 2.17L4.5 8v6h6l-2.67-2.22C7.83 10.22 9.15 9.5 11 9.5c2.54 0 4.42 1.58 5.5 3.5l1.5-.75C16.5 9.75 14.15 8 12.5 8z" />}
