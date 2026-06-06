@@ -2018,7 +2018,6 @@ button:disabled {
 .home-header.scrolled {
   background: var(--bg-soft);
   backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
 }
 
 .home-header-inner {
