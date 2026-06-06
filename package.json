@@ -54,12 +54,12 @@
       "buildResources": "public"
     },
     "win": {
-      "icon": "ZeeVault.png"
+      "icon": "public/ZeeVault.png"
     },
     "nsis": {
-      "installerIcon": "ZeeVault.ico",
-      "uninstallerIcon": "ZeeVault.ico",
-      "installerHeaderIcon": "ZeeVault.ico"
+      "installerIcon": "public/ZeeVault.ico",
+      "uninstallerIcon": "public/ZeeVault.ico",
+      "installerHeaderIcon": "public/ZeeVault.ico"
     }
   }
 }
