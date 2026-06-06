@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { VideoItem } from '../types/index';
@@ -21,6 +22,7 @@ interface VideoPlayerProps {
 }
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resumeTime }) => {
+  const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const centerControlsRef = useRef<HTMLDivElement>(null);
@@ -251,6 +253,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         });
       }
       setCurrentScreen('gallery');
+      navigate('/app/gallery');
     }
   }, [setCurrentScreen, videoUrl, currentVideo, currentTime, duration, isPlaying]);
 

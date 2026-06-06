@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { CryptoService } from '../services/cryptoService';
 import { MetaService } from '../services/metaService';
@@ -10,6 +11,7 @@ interface LoginScreenProps {
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPath, onClearSavedFolder }) => {
+  const navigate = useNavigate();
   const [password, setPassword] = useState('');
   const [folderPath, setFolderPath] = useState(savedFolderPath || '');
   const [localError, setLocalError] = useState('');
@@ -139,6 +141,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPath, on
       // Switch to gallery screen
       setCurrentScreen('gallery');
       onNotify('Vault unlocked successfully.', 'success');
+      navigate('/app/gallery');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Login failed';
       setLocalError(message);

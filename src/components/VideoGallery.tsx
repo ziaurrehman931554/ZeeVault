@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { usePlayerStore } from '../stores/playerStore';
 import VideoCard from './VideoCard';
@@ -30,6 +31,7 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
   onVideoClear,
   onClearAllCache,
 }) => {
+  const navigate = useNavigate();
   const { folderPath, videos } = useAppStore();
   const [search, setSearch] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -88,6 +90,7 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
       error: null,
       browserFiles: undefined,
     });
+    navigate('/app/login');
   };
 
   const pathParts = folderPath

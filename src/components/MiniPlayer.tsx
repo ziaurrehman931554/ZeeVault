@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MiniPlayerData, usePlayerStore } from '../stores/playerStore';
 import { useAppStore } from '../stores/appStore';
 import { formatTime } from './VideoPlayer';
@@ -8,6 +9,7 @@ interface MiniPlayerProps {
 }
 
 const MiniPlayer: React.FC<MiniPlayerProps> = ({ data }) => {
+  const navigate = useNavigate();
   const [hovered, setHovered] = useState(false);
   const [titleOverflows, setTitleOverflows] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -45,7 +47,8 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({ data }) => {
     setVideoUrl(data.videoUrl);
     setCurrentScreen('player');
     queueMicrotask(() => setMiniPlayer(null));
-  }, [data, setCurrentVideo, setVideoUrl, setMiniPlayer, setCurrentScreen]);
+    navigate(`/app/view/${encodeURIComponent(data.currentVideo.encryptedName)}`);
+  }, [data, navigate, setCurrentVideo, setVideoUrl, setMiniPlayer, setCurrentScreen]);
 
   const dismissMiniPlayer = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
