@@ -1117,8 +1117,6 @@ button:disabled {
   border-radius: 50%;
   cursor: pointer;
   transition: background 0.2s, transform 0.15s;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   flex-shrink: 0;
 }
 
@@ -1142,22 +1140,16 @@ button:disabled {
 
 .custom-player .center-controls .ctrl-btn {
   background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
 }
 
 .custom-player .center-controls .ctrl-btn-play {
   background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
 }
 
 .custom-player .ctrl-btn-play {
   width: 56px;
   height: 56px;
   background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 .custom-player .ctrl-btn-play svg {
@@ -1179,11 +1171,10 @@ button:disabled {
   align-items: center;
   gap: 12px;
   padding: 14px 12px;
-  background: rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(0, 0, 0, 0.35);
+  isolation: isolate;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   opacity: 0;
   transition: opacity 0.25s ease;
   pointer-events: none;
@@ -1291,6 +1282,7 @@ button:disabled {
   opacity: 0;
   transition: opacity 0.25s ease;
   pointer-events: none;
+  isolation: isolate;
 }
 
 .custom-player .center-controls.visible {
@@ -1323,11 +1315,10 @@ button:disabled {
   align-items: center;
   gap: 10px;
   padding: 12px 12px;
-  background: rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(0, 0, 0, 0.35);
+  isolation: isolate;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   opacity: 0;
   transition: opacity 0.25s ease;
   pointer-events: none;
@@ -1414,8 +1405,6 @@ button:disabled {
   padding: 2px 8px;
   border-radius: 6px;
   border: 1px solid rgba(255,255,255,0.1);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   white-space: nowrap;
   pointer-events: none;
 }
@@ -1435,8 +1424,6 @@ button:disabled {
   background: rgba(20, 20, 24, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   z-index: 20;
 }
@@ -1491,9 +1478,8 @@ button:disabled {
   font-size: 13px;
   font-weight: 500;
   pointer-events: none;
-  background: rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(0, 0, 0, 0.4);
+  isolation: isolate;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   opacity: 1;
@@ -1548,6 +1534,46 @@ button:disabled {
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
+}
+
+/* Consolidated backdrop-filter to prevent minifier from dropping unprefixed version */
+@supports (backdrop-filter: blur(1px)) {
+  .custom-player .ctrl-btn {
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+  .custom-player .ctrl-btn-play {
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+  .custom-player .center-controls .ctrl-btn {
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+  }
+  .custom-player .center-controls .ctrl-btn-play {
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+  }
+  .custom-player .top-bar {
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+  }
+  .custom-player .bottom-bar {
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+  }
+  .custom-player .status-indicator {
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+  }
+  .custom-player .seek-preview {
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+  .custom-player .settings-menu {
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+  }
 }
 
 @media (max-width: 920px) {
