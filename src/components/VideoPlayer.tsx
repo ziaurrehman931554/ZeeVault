@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../stores/appStore';
+import { usePlayerStore } from '../stores/playerStore';
 import { VideoItem } from '../types/index';
 
-const formatTime = (seconds: number): string => {
+export const formatTime = (seconds: number): string => {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -16,12 +17,15 @@ const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
 interface VideoPlayerProps {
   videoUrl: string | null;
   currentVideo: VideoItem | null;
+  resumeTime?: number;
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => {
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resumeTime }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const centerControlsRef = useRef<HTMLDivElement>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userPlayRef = useRef(false);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,17 +95,38 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
   }, [video]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (video?.paused) {
+      setTopCtrlVisible(true);
+      setCenterCtrlVisible(true);
+      setBottomCtrlVisible(true);
+      setShowThinSeek(false);
+      return;
+    }
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const y = e.clientY - rect.top;
     const height = rect.height;
-    const zone = y < height * 0.25 ? 'top' : y > height * 0.75 ? 'bottom' : 'center';
-    setTopCtrlVisible(zone === 'top');
-    setCenterCtrlVisible(zone === 'center');
-    setBottomCtrlVisible(zone === 'bottom');
+    const width = rect.width;
+    const isTop = y < height * 0.2;
+    const isBottom = y > height * 0.8;
+    const centerEl = centerControlsRef.current;
+    let isCenter = false;
+    if (centerEl) {
+      const cRect = centerEl.getBoundingClientRect();
+      const xPad = width * 0.015;
+      const yPad = height * 0.01;
+      isCenter =
+        e.clientX >= cRect.left - xPad &&
+        e.clientX <= cRect.right + xPad &&
+        e.clientY >= cRect.top - yPad &&
+        e.clientY <= cRect.bottom + yPad;
+    }
+    setTopCtrlVisible(isTop);
+    setCenterCtrlVisible(!isTop && !isBottom && isCenter);
+    setBottomCtrlVisible(isBottom);
     setShowThinSeek(false);
     scheduleHideAll();
-  }, [scheduleHideAll]);
+  }, [scheduleHideAll, video]);
 
   const handleMouseLeave = useCallback(() => {
     if (!video?.paused) {
@@ -121,6 +146,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
   const togglePlay = useCallback(() => {
     if (!video) return;
     if (video.paused) {
+      userPlayRef.current = true;
       video.play().catch(() => undefined);
       showStatusInfo('play', 'Play');
     } else {
@@ -213,9 +239,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
 
   const closePlayer = useCallback(() => {
     if (!useAppStore.getState().isLocked) {
+      const el = videoRef.current;
+      const store = usePlayerStore.getState();
+      if (videoUrl && currentVideo) {
+        store.setMiniPlayer({
+          videoUrl,
+          currentVideo,
+          currentTime: el?.currentTime || currentTime,
+          duration: el?.duration || duration,
+          isPlaying: el ? !el.paused : isPlaying,
+        });
+      }
       setCurrentScreen('gallery');
     }
-  }, [setCurrentScreen]);
+  }, [setCurrentScreen, videoUrl, currentVideo, currentTime, duration, isPlaying]);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -228,7 +265,26 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
 
     const onTimeUpdate = () => { setCurrentTime(el.currentTime); };
     const onDurationChange = () => { setDuration(el.duration || 0); };
-    const onPlay = () => { setIsPlaying(true); setIsLoading(false); showAllControls(); scheduleHideAll(); };
+    const onPlay = () => {
+      setIsPlaying(true);
+      setIsLoading(false);
+      if (userPlayRef.current) {
+        userPlayRef.current = false;
+        setTopCtrlVisible(false);
+        setCenterCtrlVisible(false);
+        setBottomCtrlVisible(false);
+        setShowThinSeek(true);
+        setShowSettings(false);
+        setShowVolumeSlider(false);
+        if (controlsTimerRef.current) {
+          clearTimeout(controlsTimerRef.current);
+          controlsTimerRef.current = null;
+        }
+      } else {
+        showAllControls();
+        scheduleHideAll();
+      }
+    };
     const onPause = () => { setIsPlaying(false); showAllControls(); if (controlsTimerRef.current) { clearTimeout(controlsTimerRef.current); controlsTimerRef.current = null; } };
     const onWaiting = () => { setIsLoading(true); };
     const onCanPlay = () => { setIsLoading(false); };
@@ -280,9 +336,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
       const video = videoRef.current;
       if (video) {
         video.load();
-        video.play().catch(() => undefined);
+        if (resumeTime && resumeTime > 0) {
+          const onSeeked = () => {
+            video.removeEventListener('seeked', onSeeked);
+            video.play().catch(() => undefined);
+          };
+          video.addEventListener('seeked', onSeeked);
+          video.currentTime = resumeTime;
+        } else {
+          video.play().catch(() => undefined);
+        }
       }
-      setCurrentTime(0);
+      setCurrentTime(resumeTime || 0);
       setDuration(0);
       setShowThinSeek(false);
       showAllControls();
@@ -321,9 +386,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
         if (showSettings) { setShowSettings(false); return; }
         if (showVolumeSlider) { setShowVolumeSlider(false); return; }
         if (document.fullscreenElement) { document.exitFullscreen(); return; }
-        if (!useAppStore.getState().isLocked) {
-          setCurrentScreen('gallery');
-        }
+        closePlayer();
       }
       if (event.key === 'ArrowLeft') { event.preventDefault(); skip(-10); }
       if (event.key === 'ArrowRight') { event.preventDefault(); skip(10); }
@@ -337,7 +400,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [togglePlay, skip, toggleMute, toggleFullscreen, playbackRate, handleSpeedChange, handleVolumeChange, volume, setCurrentScreen, showSettings, showVolumeSlider]);
+  }, [togglePlay, skip, toggleMute, toggleFullscreen, playbackRate, handleSpeedChange, handleVolumeChange, volume, closePlayer, showSettings, showVolumeSlider]);
 
   const volumeIcon = useMemo(() => {
     if (isMuted) {
@@ -426,7 +489,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
           </div>
         </div>
 
-        <div className={`center-controls${centerCtrlVisible ? ' visible' : ''}`} onClick={(e) => e.stopPropagation()}>
+        <div className={`center-controls${centerCtrlVisible ? ' visible' : ''}`} ref={centerControlsRef} onClick={(e) => e.stopPropagation()}>
           <button className="ctrl-btn ctrl-btn-lg" onClick={() => skip(-10)} title="Backward 10s">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M12.5 8c-2.65 0-4.05.99-5.5 2.17L4.5 8v6h6l-2.67-2.22C7.83 10.22 9.15 9.5 11 9.5c2.54 0 4.42 1.58 5.5 3.5l1.5-.75C16.5 9.75 14.15 8 12.5 8z" />

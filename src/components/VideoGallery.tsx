@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../stores/appStore';
+import { usePlayerStore } from '../stores/playerStore';
 import VideoCard from './VideoCard';
 import { DecryptJob, ThemeMode, VideoItem } from '../types/index';
 
@@ -72,6 +73,11 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
     Object.values(decryptJobs).forEach((job) => {
       if (job.url) URL.revokeObjectURL(job.url);
     });
+    const playerStore = usePlayerStore.getState();
+    if (playerStore.miniPlayer) {
+      URL.revokeObjectURL(playerStore.miniPlayer.videoUrl);
+    }
+    playerStore.reset();
     useAppStore.setState({
       currentScreen: 'login',
       folderPath: '',

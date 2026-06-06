@@ -4,6 +4,7 @@ import { usePlayerStore } from './stores/playerStore';
 import LoginScreen from './components/LoginScreen';
 import VideoGallery from './components/VideoGallery';
 import VideoPlayer from './components/VideoPlayer';
+import MiniPlayer from './components/MiniPlayer';
 import LockScreen from './components/LockScreen';
 import { DecryptJob, NotificationItem, ThemeMode, VideoItem } from './types/index';
 import { CryptoService } from './services/cryptoService';
@@ -13,9 +14,20 @@ const MAX_READY_CACHE = 20;
 
 const App: React.FC = () => {
   const { currentScreen, password, browserFiles, isLocked, setLocked } = useAppStore();
-  const { currentVideo, videoUrl, setCurrentVideo, setIsDecrypting, setDecryptProgress, setVideoUrl } =
+  const { currentVideo, videoUrl, miniPlayer, setCurrentVideo, setIsDecrypting, setDecryptProgress, setVideoUrl } =
     usePlayerStore();
   const [theme, setTheme] = useState<ThemeMode>('dark');
+  const [savedFolderPath, setSavedFolderPath] = useState<string>(() => {
+    try {
+      const path = localStorage.getItem('vault-folder-path');
+      if (!path) return '';
+      if (!(window as any).electronAPI?.readMetaFile) {
+        localStorage.removeItem('vault-folder-path');
+        return '';
+      }
+      return path;
+    } catch { return ''; }
+  });
   const [decryptJobs, setDecryptJobs] = useState<Record<string, DecryptJob>>({});
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const decryptJobsRef = useRef(decryptJobs);
@@ -281,6 +293,10 @@ const App: React.FC = () => {
     if (playerState.videoUrl) {
       setVideoUrl(null);
     }
+    if (playerState.miniPlayer) {
+      URL.revokeObjectURL(playerState.miniPlayer.videoUrl);
+      usePlayerStore.getState().setMiniPlayer(null);
+    }
     notify(
       clearedCount
         ? `Cleared ${clearedCount} decrypted video${clearedCount === 1 ? '' : 's'} from cache.`
@@ -354,7 +370,16 @@ const App: React.FC = () => {
       <div className="ambient-shape shape-three" />
       <NotificationStack notifications={notifications} />
       {isLocked && <LockScreen />}
-      {currentScreen === 'login' && <LoginScreen onNotify={notify} />}
+      {currentScreen === 'login' && (
+        <LoginScreen
+          onNotify={notify}
+          savedFolderPath={savedFolderPath}
+          onClearSavedFolder={() => {
+            setSavedFolderPath('');
+            try { localStorage.removeItem('vault-folder-path'); } catch {}
+          }}
+        />
+      )}
       {currentScreen === 'gallery' && (
         <VideoGallery
           decryptJobs={decryptJobs}
@@ -367,7 +392,8 @@ const App: React.FC = () => {
           onClearAllCache={handleClearAllCache}
         />
       )}
-      {currentScreen === 'player' && <VideoPlayer videoUrl={videoUrl} currentVideo={currentVideo} />}
+      {currentScreen === 'player' && <VideoPlayer videoUrl={videoUrl} currentVideo={currentVideo} resumeTime={miniPlayer?.currentTime} />}
+      {miniPlayer && currentScreen !== 'player' && <MiniPlayer data={miniPlayer} />}
     </div>
   );
 };

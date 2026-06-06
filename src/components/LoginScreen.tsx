@@ -5,14 +5,19 @@ import { MetaService } from '../services/metaService';
 
 interface LoginScreenProps {
   onNotify: (message: string, type?: 'success' | 'error' | 'info') => void;
+  savedFolderPath?: string;
+  onClearSavedFolder?: () => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPath, onClearSavedFolder }) => {
   const [password, setPassword] = useState('');
-  const [folderPath, setFolderPath] = useState('');
+  const [folderPath, setFolderPath] = useState(savedFolderPath || '');
   const [localError, setLocalError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [changingFolder, setChangingFolder] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const showQuickUnlock = !!(savedFolderPath && !changingFolder);
 
   const {
     setCurrentScreen,
@@ -126,6 +131,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify }) => {
       setMetaFile(meta);
       setVideos(videos);
 
+      // Persist folder path (Electron only — browser mode can't rehydrate FileList)
+      if ((window as any).electronAPI?.readMetaFile) {
+        try { localStorage.setItem('vault-folder-path', folderPath); } catch {}
+      }
+
       // Switch to gallery screen
       setCurrentScreen('gallery');
       onNotify('Vault unlocked successfully.', 'success');
@@ -152,42 +162,75 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify }) => {
               <span>Z</span>ee<span>V</span>ault
             </h1>
           </div>
-          <p>Unlock your encrypted videos</p>
+          {showQuickUnlock ? (
+            <p>Quick unlock</p>
+          ) : (
+            <p>Unlock your encrypted videos</p>
+          )}
         </div>
 
         <form onSubmit={handleLogin} className="vault-form">
-          <div className="field-group">
-            <label>Folder Path</label>
-            <div className="folder-row">
-              <input
-                type="text"
-                value={folderPath}
-                onChange={(e) => setFolderPath(e.target.value)}
-                placeholder="Select folder containing vault.meta"
-                readOnly
-              />
-              <button type="button" onClick={handleFolderSelect}>
-                Browse
-              </button>
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              webkitdirectory="true"
-              onChange={handleBrowserFolderSelect}
-              style={{ display: 'none' }}
-            />
-          </div>
+          {showQuickUnlock ? (
+            <>
+              <div className="field-group quick-folder">
+                <label>Folder</label>
+                <div className="folder-display">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="18" height="18">
+                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                  </svg>
+                  <span className="folder-name">{savedFolderPath}</span>
+                </div>
+                <button type="button" className="link-btn" onClick={() => { setChangingFolder(true); setFolderPath(''); onClearSavedFolder?.(); }}>
+                  Change folder
+                </button>
+              </div>
+              <div className="field-group">
+                <label>Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter vault password"
+                  autoFocus
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="field-group">
+                <label>Folder Path</label>
+                <div className="folder-row">
+                  <input
+                    type="text"
+                    value={folderPath}
+                    onChange={(e) => setFolderPath(e.target.value)}
+                    placeholder="Select folder containing vault.meta"
+                    readOnly
+                  />
+                  <button type="button" onClick={handleFolderSelect}>
+                    Browse
+                  </button>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  webkitdirectory="true"
+                  onChange={handleBrowserFolderSelect}
+                  style={{ display: 'none' }}
+                />
+              </div>
 
-          <div className="field-group">
-            <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter vault password"
-            />
-          </div>
+              <div className="field-group">
+                <label>Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter vault password"
+                />
+              </div>
+            </>
+          )}
 
           {localError && <div className="form-error">{localError}</div>}
 
