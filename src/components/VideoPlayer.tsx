@@ -33,7 +33,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
   });
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [controlsVisible, setControlsVisible] = useState(false);
+  const [topCtrlVisible, setTopCtrlVisible] = useState(false);
+  const [centerCtrlVisible, setCenterCtrlVisible] = useState(false);
+  const [bottomCtrlVisible, setBottomCtrlVisible] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -59,8 +61,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferedProgress = duration > 0 ? (buffered / duration) * 100 : 0;
 
-  const showControls = useCallback(() => {
-    setControlsVisible(true);
+  const showAllControls = useCallback(() => {
+    setTopCtrlVisible(true);
+    setCenterCtrlVisible(true);
+    setBottomCtrlVisible(true);
     setShowThinSeek(false);
     if (controlsTimerRef.current) {
       clearTimeout(controlsTimerRef.current);
@@ -68,14 +72,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
     }
   }, []);
 
-  const scheduleHide = useCallback(() => {
+  const scheduleHideAll = useCallback(() => {
     if (controlsTimerRef.current) {
       clearTimeout(controlsTimerRef.current);
       controlsTimerRef.current = null;
     }
     if (!video?.paused) {
       controlsTimerRef.current = setTimeout(() => {
-        setControlsVisible(false);
+        setTopCtrlVisible(false);
+        setCenterCtrlVisible(false);
+        setBottomCtrlVisible(false);
         setShowThinSeek(true);
         setShowSettings(false);
         setShowVolumeSlider(false);
@@ -84,17 +90,31 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
     }
   }, [video]);
 
-  const handleMouseMove = useCallback(() => {
-    showControls();
-    scheduleHide();
-  }, [showControls, scheduleHide]);
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+    const zone = y < height * 0.25 ? 'top' : y > height * 0.75 ? 'bottom' : 'center';
+    setTopCtrlVisible(zone === 'top');
+    setCenterCtrlVisible(zone === 'center');
+    setBottomCtrlVisible(zone === 'bottom');
+    setShowThinSeek(false);
+    scheduleHideAll();
+  }, [scheduleHideAll]);
 
   const handleMouseLeave = useCallback(() => {
     if (!video?.paused) {
-      setControlsVisible(false);
+      setTopCtrlVisible(false);
+      setCenterCtrlVisible(false);
+      setBottomCtrlVisible(false);
       setShowThinSeek(true);
       setShowSettings(false);
       setShowVolumeSlider(false);
+    }
+    if (controlsTimerRef.current) {
+      clearTimeout(controlsTimerRef.current);
+      controlsTimerRef.current = null;
     }
   }, [video]);
 
@@ -208,8 +228,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
 
     const onTimeUpdate = () => { setCurrentTime(el.currentTime); };
     const onDurationChange = () => { setDuration(el.duration || 0); };
-    const onPlay = () => { setIsPlaying(true); setIsLoading(false); showControls(); scheduleHide(); };
-    const onPause = () => { setIsPlaying(false); showControls(); if (controlsTimerRef.current) { clearTimeout(controlsTimerRef.current); controlsTimerRef.current = null; } };
+    const onPlay = () => { setIsPlaying(true); setIsLoading(false); showAllControls(); scheduleHideAll(); };
+    const onPause = () => { setIsPlaying(false); showAllControls(); if (controlsTimerRef.current) { clearTimeout(controlsTimerRef.current); controlsTimerRef.current = null; } };
     const onWaiting = () => { setIsLoading(true); };
     const onCanPlay = () => { setIsLoading(false); };
     const onProgress = () => {
@@ -253,7 +273,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
       el.removeEventListener('error', onError);
       document.removeEventListener('fullscreenchange', onFullscreenChange);
     };
-  }, [volume, isMuted, showControls, scheduleHide, videoUrl]);
+  }, [volume, isMuted, showAllControls, scheduleHideAll, videoUrl]);
 
   useEffect(() => {
     if (videoUrl) {
@@ -265,7 +285,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
       setCurrentTime(0);
       setDuration(0);
       setShowThinSeek(false);
-      setControlsVisible(true);
+      showAllControls();
       setIsLoading(true);
       if (controlsTimerRef.current) {
         clearTimeout(controlsTimerRef.current);
@@ -366,10 +386,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
       )}
 
       <div
-        className={`controls-overlay${controlsVisible ? ' visible' : ''}`}
+        className={`controls-overlay${topCtrlVisible || centerCtrlVisible || bottomCtrlVisible ? ' visible' : ''}`}
         onClick={togglePlay}
       >
-        <div className="top-bar" onClick={(e) => e.stopPropagation()}>
+        <div className={`top-bar${topCtrlVisible ? ' visible' : ''}`} onClick={(e) => e.stopPropagation()}>
           <button className="ctrl-btn close-btn" onClick={closePlayer} title="Close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M18 6L6 18M6 6l12 12" />
@@ -406,7 +426,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
           </div>
         </div>
 
-        <div className="center-controls" onClick={(e) => e.stopPropagation()}>
+        <div className={`center-controls${centerCtrlVisible ? ' visible' : ''}`} onClick={(e) => e.stopPropagation()}>
           <button className="ctrl-btn ctrl-btn-lg" onClick={() => skip(-10)} title="Backward 10s">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M12.5 8c-2.65 0-4.05.99-5.5 2.17L4.5 8v6h6l-2.67-2.22C7.83 10.22 9.15 9.5 11 9.5c2.54 0 4.42 1.58 5.5 3.5l1.5-.75C16.5 9.75 14.15 8 12.5 8z" />
@@ -433,7 +453,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo }) => 
           </button>
         </div>
 
-        <div className="bottom-bar" onClick={(e) => e.stopPropagation()}>
+        <div className={`bottom-bar${bottomCtrlVisible ? ' visible' : ''}`} onClick={(e) => e.stopPropagation()}>
           <span className="time-display">{formatTimeDisplay}</span>
           <div
             className="seek-track"
