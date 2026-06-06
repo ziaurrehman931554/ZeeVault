@@ -1,6 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 let mainWindow = null;
 const createWindow = () => {
     mainWindow = new BrowserWindow({
@@ -51,7 +54,7 @@ ipcMain.handle('selectFolder', async () => {
         return null;
     return result.filePaths[0];
 });
-ipcMain.handle('readMetaFile', async (event, folderPath) => {
+ipcMain.handle('readMetaFile', async (_event, folderPath) => {
     try {
         const metaPath = path.join(folderPath, 'vault.meta');
         const content = await fs.readFile(metaPath, 'utf-8');
@@ -62,10 +65,10 @@ ipcMain.handle('readMetaFile', async (event, folderPath) => {
         return null;
     }
 });
-ipcMain.handle('readFile', async (event, filePath) => {
+ipcMain.handle('readFile', async (_event, filePath) => {
     try {
         const buffer = await fs.readFile(filePath);
-        return buffer;
+        return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
     }
     catch (error) {
         console.error('Error reading file:', error);
