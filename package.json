@@ -47,20 +47,46 @@
   "build": {
     "appId": "com.zeevault.app",
     "productName": "ZeeVault",
+    "copyright": "Copyright © 2026 ZeeVault",
     "files": [
       "dist",
       "dist-electron"
     ],
     "directories": {
-      "buildResources": "public"
+      "buildResources": "buildResources",
+      "output": "installers"
+    },
+    "extraMetadata": {
+      "name": "ZeeVault",
+      "author": "ZeeVault"
     },
     "win": {
-      "icon": "public/ZeeVault.png"
+      "icon": "public/ZeeVault.png",
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "legalTrademarks": "ZeeVault",
+      "verifyUpdateCodeSignature": false,
+      "signAndEditExecutable": false,
+      "forceCodeSigning": false
     },
     "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": true,
       "installerIcon": "public/ZeeVault.ico",
       "uninstallerIcon": "public/ZeeVault.ico",
-      "installerHeaderIcon": "public/ZeeVault.ico"
+      "installerHeaderIcon": "public/ZeeVault.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ZeeVault",
+      "artifactName": "ZeeVault-Setup-${version}.exe",
+      "displayLanguageSelector": false
+    },
+    "portable": {
+      "artifactName": "ZeeVault-Portable-${version}.exe",
+      "requestExecutionLevel": "user"
     }
   }
 }

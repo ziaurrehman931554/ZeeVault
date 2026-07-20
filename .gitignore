@@ -23,3 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 Sample Videos/
+buildResources/
+installers/
+
+.vercel
