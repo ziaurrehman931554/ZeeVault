@@ -61,20 +61,19 @@
       "author": "ZeeVault"
     },
     "win": {
-      "icon": "public/ZeeVault.ico",
+      "icon": "buildResources/icon.png",
       "target": [
         "nsis",
         "portable"
       ],
       "legalTrademarks": "ZeeVault",
       "verifyUpdateCodeSignature": false,
-      "signAndEditExecutable": false,
       "forceCodeSigning": false
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "perMachine": true,
+      "perMachine": false,
       "installerIcon": "public/ZeeVault.ico",
       "uninstallerIcon": "public/ZeeVault.ico",
       "installerHeaderIcon": "public/ZeeVault.ico",
