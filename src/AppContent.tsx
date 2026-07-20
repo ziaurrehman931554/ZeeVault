@@ -9,6 +9,7 @@ import MiniPlayer from './components/MiniPlayer';
 import LockScreen from './components/LockScreen';
 import ImageViewer from './components/ImageViewer';
 import PasswordPrompt from './components/PasswordPrompt';
+import CustomScrollbar from './components/CustomScrollbar';
 import { DecryptJob, NotificationItem, ThemeMode, VideoItem } from './types/index';
 import { MediaScanner } from './services/mediaScanner';
 import { CryptoService } from './services/cryptoService';
@@ -554,8 +555,8 @@ const AppContent: React.FC = () => {
     const path = location.pathname.replace(/\/app\//, '');
     if (path === 'gallery' && currentScreen !== 'gallery') {
       setCurrentScreen('gallery');
-    } else if (path === 'login' && currentScreen !== 'login') {
-      setCurrentScreen('login');
+    } else if (path === 'login') {
+      if (currentScreen !== 'login') setCurrentScreen('login');
       unencryptedThumbsGeneratedRef.current = false;
     }
   }, [location.pathname]);
@@ -591,6 +592,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className={`app-shell theme-${theme}`}>
+      <CustomScrollbar />
       <div className="ambient-shape shape-one" />
       <div className="ambient-shape shape-two" />
       <div className="ambient-shape shape-three" />

@@ -375,6 +375,12 @@ button:disabled {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  border: none;
+}
+
+.decrypt-button:hover,
+.play-button:hover {
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--border));
 }
 
 .decrypt-button:disabled {
@@ -430,7 +436,7 @@ button:disabled {
   gap: 10px;
 }
 
-.button-loader span {
+.button-loader span:first-child {
   width: 16px;
   height: 16px;
   border-radius: 999px;
@@ -1596,21 +1602,7 @@ button:disabled {
   transition: width 0.1s linear;
 }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: color-mix(in srgb, var(--bg) 88%, #000);
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
+/* Scrollbar styles injected via main.ts insertCSS for reliability */
 
 /* Consolidated backdrop-filter to prevent minifier from dropping unprefixed version */
 @supports (backdrop-filter: blur(1px)) {

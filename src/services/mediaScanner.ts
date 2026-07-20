@@ -35,7 +35,8 @@ export class MediaScanner {
 
   static parseMeta(metaContent: string): MetaFile {
     try {
-      return JSON.parse(metaContent) as MetaFile;
+      const cleaned = metaContent.replace(/^\uFEFF/, '');
+      return JSON.parse(cleaned) as MetaFile;
     } catch (error) {
       throw new Error(`Failed to parse meta file: ${error}`);
     }

@@ -28,6 +28,13 @@ const createWindow = () => {
         ? 'http://localhost:5173'
         : `file://${path.join(__dirname, '../dist/index.html')}`;
     mainWindow.loadURL(startUrl);
+    mainWindow.webContents.on('did-finish-load', () => {
+        mainWindow?.webContents.insertCSS(`
+      ::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+      html { scrollbar-width: none !important; }
+    `);
+    });
+    mainWindow.maximize();
     if (isDev) {
         mainWindow.webContents.openDevTools();
     }
@@ -68,7 +75,9 @@ ipcMain.handle('readMetaFile', async (_event, folderPath) => {
         return content;
     }
     catch (error) {
-        console.error('Error reading meta file:', error);
+        if (error.code !== 'ENOENT') {
+            console.error('Error reading meta file:', error);
+        }
         return null;
     }
 });

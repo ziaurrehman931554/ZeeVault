@@ -35,6 +35,15 @@ const createWindow = () => {
 
   mainWindow.loadURL(startUrl);
 
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow?.webContents.insertCSS(`
+      ::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+      html { scrollbar-width: none !important; }
+    `);
+  });
+
+  mainWindow.maximize();
+
   if (isDev) {
     mainWindow.webContents.openDevTools();
   }
@@ -81,7 +90,9 @@ ipcMain.handle('readMetaFile', async (_event, folderPath: string) => {
     const content = await fs.readFile(metaPath, 'utf-8');
     return content;
   } catch (error) {
-    console.error('Error reading meta file:', error);
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error('Error reading meta file:', error);
+    }
     return null;
   }
 });
