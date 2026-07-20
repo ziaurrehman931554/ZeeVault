@@ -61,7 +61,7 @@
       "author": "ZeeVault"
     },
     "win": {
-      "icon": "public/ZeeVault.png",
+      "icon": "public/ZeeVault.ico",
       "target": [
         "nsis",
         "portable"
