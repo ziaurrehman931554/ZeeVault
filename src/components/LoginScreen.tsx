@@ -1,8 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
-import { CryptoService } from '../services/cryptoService';
-import { MetaService } from '../services/metaService';
+import { MediaScanner } from '../services/mediaScanner';
 
 interface LoginScreenProps {
   onNotify: (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -12,33 +11,82 @@ interface LoginScreenProps {
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPath, onClearSavedFolder }) => {
   const navigate = useNavigate();
-  const [password, setPassword] = useState('');
   const [folderPath, setFolderPath] = useState(savedFolderPath || '');
   const [localError, setLocalError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [changingFolder, setChangingFolder] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const showQuickUnlock = !!(savedFolderPath && !changingFolder);
 
   const {
     setCurrentScreen,
     setFolderPath: setAppFolderPath,
-    setPassword: setAppPassword,
     setMetaFile,
     setVideos,
     setError: setAppError,
     setBrowserFiles,
+    setHasEncryptedContent,
   } = useAppStore();
 
+  const processFolder = useCallback(async (path: string, files?: FileList) => {
+    setLoading(true);
+    setLocalError('');
+
+    try {
+      const metaContent = await MediaScanner.readMetaContent(path, files);
+      let encryptedVideos: any[] = [];
+      let metaFile = null;
+      let hasEncrypted = false;
+
+      if (metaContent) {
+        metaFile = MediaScanner.parseMeta(metaContent);
+        if (MediaScanner.isValidMetaFile(metaFile)) {
+          hasEncrypted = true;
+          encryptedVideos = MediaScanner.metaToEncryptedVideos(metaFile, path);
+        }
+      }
+
+      const scannedFiles = await MediaScanner.scanFolderFiles(path, files);
+      const unencryptedVideos = MediaScanner.scannedToUnencryptedVideos(scannedFiles, path);
+      const allVideos = MediaScanner.mergeMedia(encryptedVideos, unencryptedVideos);
+
+      setAppFolderPath(path);
+      setMetaFile(metaFile);
+      setVideos(allVideos);
+      setHasEncryptedContent(hasEncrypted);
+
+      if (files) {
+        setBrowserFiles(files);
+      }
+
+      try {
+        if ((window as any).electronAPI?.setStoredFolderPath) {
+          await (window as any).electronAPI.setStoredFolderPath(path);
+        } else {
+          localStorage.setItem('vault-folder-path', path);
+        }
+      } catch (e) {
+        console.error('Failed to save folder path:', e);
+      }
+      setCurrentScreen('gallery');
+      onNotify(`Found ${allVideos.length} media files`, 'success');
+      navigate('/app/gallery');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to read folder';
+      setLocalError(message);
+      setAppError(message);
+      onNotify(message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [setAppFolderPath, setMetaFile, setVideos, setHasEncryptedContent, setBrowserFiles, setCurrentScreen, setAppError, onNotify, navigate]);
+
   const handleFolderSelect = async () => {
-    // Try Electron first (if app is packaged)
     if ((window as any).electronAPI?.selectFolder) {
       try {
         const result = await (window as any).electronAPI.selectFolder();
         if (result) {
           setFolderPath(result);
           setLocalError('');
+          await processFolder(result);
         }
       } catch (error) {
         const message = 'Failed to select folder';
@@ -46,7 +94,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPath, on
         onNotify(message, 'error');
       }
     } else {
-      // Fallback to browser file picker for development
       fileInputRef.current?.click();
     }
   };
@@ -54,101 +101,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPath, on
   const handleBrowserFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.currentTarget.files;
     if (files && files.length > 0) {
-      // Get the folder path from the first file
       const filePath = files[0].webkitRelativePath || '';
       const folderPath = filePath.split('/')[0];
       if (folderPath) {
-        const displayPath = `${folderPath}`;
+        const displayPath = folderPath;
         setFolderPath(displayPath);
-        setBrowserFiles(files); // Store files for later use
         setLocalError('');
         onNotify(`Selected ${displayPath}`, 'success');
+        await processFolder(displayPath, files);
       }
-    }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!folderPath || !password) {
-      const message = 'Please select folder and enter password';
-      setLocalError(message);
-      onNotify(message, 'error');
-      return;
-    }
-
-    setLoading(true);
-    setLocalError('');
-
-    try {
-      // Call Electron IPC to load meta file (or browser fallback)
-      let metaContent;
-      
-      if ((window as any).electronAPI?.readMetaFile) {
-        // Electron mode
-        metaContent = await (window as any).electronAPI.readMetaFile(folderPath);
-      } else {
-        // Browser mode - read from file input
-        const files = fileInputRef.current?.files;
-        if (!files) {
-          throw new Error('No files selected');
-        }
-        
-        // Find vault.meta file
-        let metaFile = null;
-        for (let i = 0; i < files.length; i++) {
-          if (files[i].name === 'vault.meta') {
-            metaFile = files[i];
-            break;
-          }
-        }
-        
-        if (!metaFile) {
-          throw new Error('No .meta file found in selected folder');
-        }
-        
-        metaContent = await metaFile.text();
-      }
-
-      if (!metaContent) {
-        throw new Error('No .meta file found in selected folder');
-      }
-
-      const meta = MetaService.parseMeta(metaContent);
-
-      if (!MetaService.isValidMetaFile(meta)) {
-        throw new Error('Invalid .meta file format');
-      }
-
-      // Verify password
-      if (!CryptoService.verifyPassword(password, meta.password_hash)) {
-        throw new Error('Invalid password');
-      }
-
-      // Convert meta to videos
-      const videos = MetaService.metaToVideos(meta, folderPath);
-
-      // Store in app state
-      setAppFolderPath(folderPath);
-      setAppPassword(password);
-      setMetaFile(meta);
-      setVideos(videos);
-
-      // Persist folder path (Electron only — browser mode can't rehydrate FileList)
-      if ((window as any).electronAPI?.readMetaFile) {
-        try { localStorage.setItem('vault-folder-path', folderPath); } catch {}
-      }
-
-      // Switch to gallery screen
-      setCurrentScreen('gallery');
-      onNotify('Vault unlocked successfully.', 'success');
-      navigate('/app/gallery');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Login failed';
-      setLocalError(message);
-      setAppError(message);
-      onNotify(message, 'error');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -165,92 +126,59 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPath, on
               <span>Z</span>ee<span>V</span>ault
             </h1>
           </div>
-          {showQuickUnlock ? (
-            <p>Quick unlock</p>
-          ) : (
-            <p>Unlock your encrypted videos</p>
-          )}
+          <p>Open your media folder to get started</p>
         </div>
 
-        <form onSubmit={handleLogin} className="vault-form">
-          {showQuickUnlock ? (
-            <>
-              <div className="field-group quick-folder">
-                <label>Folder</label>
-                <div className="folder-display">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="18" height="18">
-                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                  </svg>
-                  <span className="folder-name">{savedFolderPath}</span>
-                </div>
-                <button type="button" className="link-btn" onClick={() => { setChangingFolder(true); setFolderPath(''); onClearSavedFolder?.(); }}>
-                  Change folder
-                </button>
-              </div>
-              <div className="field-group">
-                <label>Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter vault password"
-                  autoFocus
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="field-group">
-                <label>Folder Path</label>
-                <div className="folder-row">
-                  <input
-                    type="text"
-                    value={folderPath}
-                    onChange={(e) => setFolderPath(e.target.value)}
-                    placeholder="Select folder containing vault.meta"
-                    readOnly
-                  />
-                  <button type="button" onClick={handleFolderSelect}>
-                    Browse
-                  </button>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  webkitdirectory="true"
-                  onChange={handleBrowserFolderSelect}
-                  style={{ display: 'none' }}
-                />
-              </div>
+        <div className="vault-form">
+          <div className="field-group">
+            <label>Folder Path</label>
+            <div className="folder-row">
+              <input
+                type="text"
+                value={folderPath}
+                onChange={(e) => setFolderPath(e.target.value)}
+                placeholder="Select or enter folder path"
+                readOnly
+              />
+              <button type="button" onClick={handleFolderSelect} disabled={loading}>
+                {loading ? '...' : 'Browse'}
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              webkitdirectory="true"
+              onChange={handleBrowserFolderSelect}
+              style={{ display: 'none' }}
+            />
+          </div>
 
-              <div className="field-group">
-                <label>Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter vault password"
-                />
-              </div>
-            </>
+          {savedFolderPath && (
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => {
+                setFolderPath('');
+                onClearSavedFolder?.();
+              }}
+              style={{ marginTop: '-14px' }}
+            >
+              Clear saved folder
+            </button>
           )}
 
           {localError && <div className="form-error">{localError}</div>}
 
-          <button type="submit" disabled={loading} className="primary-button">
-            {loading ? (
-              <span className="button-loader">
-                <span />
-                Unlocking...
-              </span>
-            ) : (
-              'Unlock Vault'
-            )}
-          </button>
-        </form>
+          {loading && (
+            <div className="button-loader" style={{ justifyContent: 'center', padding: '12px 0' }}>
+              <span />
+              <span style={{ color: 'var(--muted)', fontSize: '14px' }}>Scanning folder...</span>
+            </div>
+          )}
+        </div>
 
         <p className="login-note">
-          Your password is never stored. It is verified locally only.
+          Select a folder with videos, images, or encrypted media. Encrypted files will require a password to view.
         </p>
       </div>
     </div>

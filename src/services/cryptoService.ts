@@ -7,31 +7,16 @@ type BinaryLike =
   | { data: number[] }
   | { buffer: ArrayBuffer; byteOffset?: number; byteLength?: number };
 
-/**
- * Service for handling XOR decryption of video files
- * Mirrors the PowerShell FastXOR implementation
- * Works in both Node.js (Electron) and Browser environments
- */
-
 export class CryptoService {
-  /**
-   * Compute SHA256 hash of password
-   */
   static hashPassword(password: string): string {
     return CryptoJS.SHA256(password).toString();
   }
 
-  /**
-   * Verify password against stored hash
-   */
   static verifyPassword(password: string, storedHash: string): boolean {
     const hash = this.hashPassword(password);
     return hash === storedHash;
   }
 
-  /**
-   * Helper: Convert various buffer types to Uint8Array
-   */
   private static toUint8Array(buffer: BinaryLike): Uint8Array {
     if (buffer instanceof Uint8Array) return buffer;
     if (buffer instanceof ArrayBuffer) return new Uint8Array(buffer);
@@ -49,18 +34,11 @@ export class CryptoService {
     throw new Error('Unsupported encrypted file data format');
   }
 
-  /**
-   * Helper: Convert string to Uint8Array
-   */
   private static stringToUint8Array(str: string): Uint8Array {
     const encoder = new TextEncoder();
     return encoder.encode(str);
   }
 
-  /**
-   * XOR decrypt a buffer using password as key
-   * This is the inverse operation of the PowerShell FastXOR
-   */
   static xorDecrypt(encryptedBuffer: BinaryLike, password: string): Uint8Array {
     const buffer = this.toUint8Array(encryptedBuffer);
     const keyBytes = this.stringToUint8Array(password);
@@ -74,14 +52,10 @@ export class CryptoService {
     return decrypted;
   }
 
-  /**
-   * XOR decrypt in chunks for large files (streaming)
-   * Yields decrypted chunks
-   */
   static *xorDecryptChunked(
     encryptedBuffer: BinaryLike,
     password: string,
-    chunkSize: number = 1024 * 1024 // 1MB chunks
+    chunkSize: number = 1024 * 1024
   ): Generator<Uint8Array> {
     const buffer = this.toUint8Array(encryptedBuffer);
     const keyBytes = this.stringToUint8Array(password);
@@ -101,9 +75,14 @@ export class CryptoService {
     }
   }
 
-  /**
-   * Convert decrypted buffer to blob URL for video playback
-   */
+  static xorEncryptBytes(data: Uint8Array, password: string): Uint8Array {
+    return this.xorDecrypt(data, password);
+  }
+
+  static xorDecryptBytes(data: Uint8Array, password: string): Uint8Array {
+    return this.xorDecrypt(data, password);
+  }
+
   static bufferToBlob(buffer: BinaryLike, mimeType: string = 'video/mp4'): string {
     const uint8Array = this.toUint8Array(buffer);
     const arrayBuffer = new ArrayBuffer(uint8Array.byteLength);
@@ -112,18 +91,12 @@ export class CryptoService {
     return URL.createObjectURL(blob);
   }
 
-  /**
-   * Clean up blob URL
-   */
   static revokeBlobUrl(url: string): void {
     if (url) {
       URL.revokeObjectURL(url);
     }
   }
 
-  /**
-   * Get MIME type from file extension
-   */
   static getMimeType(filename: string): string {
     const ext = filename.toLowerCase().split('.').pop();
     const mimeTypes: Record<string, string> = {
@@ -141,7 +114,26 @@ export class CryptoService {
       ogx: 'video/ogg',
       '3gp': 'video/3gpp',
       flv: 'video/x-flv',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      bmp: 'image/bmp',
+      tiff: 'image/tiff',
+      tif: 'image/tiff',
+      webp: 'image/webp',
     };
     return mimeTypes[ext || ''] || 'video/mp4';
+  }
+
+  static decryptThumbnail(encryptedBase64: string, password: string): string | null {
+    try {
+      const encryptedBytes = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
+      const decryptedBytes = this.xorDecrypt(encryptedBytes, password);
+      const blob = new Blob([decryptedBytes], { type: 'image/jpeg' });
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
   }
 }

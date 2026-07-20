@@ -11,7 +11,7 @@
     "dev:vite": "vite",
     "dev:electron": "wait-on http://localhost:5173 && electron .",
     "build": "vite build",
-    "build:electron": "tsc --ignoreConfig src/main.ts src/preload.ts --outDir dist-electron --target es2020 --module esnext --moduleResolution bundler --allowSyntheticDefaultImports --esModuleInterop",
+    "build:electron": "tsc --ignoreConfig src/main.ts --outDir dist-electron --target es2020 --module esnext --moduleResolution bundler --allowSyntheticDefaultImports --esModuleInterop && tsc --ignoreConfig src/preload.ts --outDir dist-electron --target es2020 --module commonjs --esModuleInterop",
     "preview": "vite preview",
     "pack": "electron-builder --publish never",
     "dist": "npm run build && npm run build:electron && electron-builder"

@@ -27,4 +27,54 @@ contextBridge.exposeInMainWorld('electronAPI', {
       throw error;
     }
   },
+
+  fileExists: async (filePath: string) => {
+    try {
+      return await ipcRenderer.invoke('fileExists', filePath);
+    } catch {
+      return false;
+    }
+  },
+
+  listMediaFiles: async (folderPath: string) => {
+    try {
+      return await ipcRenderer.invoke('listMediaFiles', folderPath);
+    } catch (error) {
+      console.error('Error in listMediaFiles:', error);
+      return [];
+    }
+  },
+
+  getStoredFolderPath: async () => {
+    try {
+      return await ipcRenderer.invoke('getStoredFolderPath');
+    } catch {
+      return null;
+    }
+  },
+
+  setStoredFolderPath: async (folderPath: string) => {
+    try {
+      return await ipcRenderer.invoke('setStoredFolderPath', folderPath);
+    } catch {
+      return false;
+    }
+  },
+
+  checkPath: async (folderPath: string) => {
+    try {
+      return await ipcRenderer.invoke('checkPath', folderPath);
+    } catch {
+      return false;
+    }
+  },
+
+  restoreFolder: async (folderPath: string) => {
+    try {
+      return await ipcRenderer.invoke('restoreFolder', folderPath);
+    } catch (error) {
+      console.error('Error in restoreFolder:', error);
+      return [];
+    }
+  },
 });

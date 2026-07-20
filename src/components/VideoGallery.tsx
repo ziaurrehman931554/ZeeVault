@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { usePlayerStore } from '../stores/playerStore';
 import VideoCard from './VideoCard';
-import { DecryptJob, ThemeMode, VideoItem } from '../types/index';
+import { DecryptJob, FilterType, SortField, ThemeMode, VideoItem } from '../types/index';
 
 interface VideoGalleryProps {
   decryptJobs: Record<string, DecryptJob>;
@@ -19,7 +19,24 @@ interface VideoGalleryProps {
   onVideoPlay: (video: VideoItem) => void;
   onVideoClear: (video: VideoItem) => void;
   onClearAllCache: () => void;
+  onViewImage: (video: VideoItem) => void;
 }
+
+const FILTER_OPTIONS: { key: FilterType; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'videos', label: 'Videos' },
+  { key: 'images', label: 'Images' },
+  { key: 'encrypted', label: 'Encrypted' },
+  { key: 'unencrypted', label: 'Unencrypted' },
+];
+
+const SORT_OPTIONS: { key: SortField; label: string }[] = [
+  { key: 'name', label: 'Name' },
+  { key: 'dateAdded', label: 'Date Created' },
+  { key: 'dateModified', label: 'Date Modified' },
+  { key: 'type', label: 'Type' },
+  { key: 'size', label: 'Size' },
+];
 
 const VideoGallery: React.FC<VideoGalleryProps> = ({
   decryptJobs,
@@ -30,9 +47,10 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
   onVideoPlay,
   onVideoClear,
   onClearAllCache,
+  onViewImage,
 }) => {
   const navigate = useNavigate();
-  const { folderPath, videos } = useAppStore();
+  const { folderPath, videos, filterType, sortField, sortAscending, setFilterType, setSortField, setSortAscending } = useAppStore();
   const [search, setSearch] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -64,12 +82,56 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
   }, [onClearAllCache]);
 
   const filteredVideos = useMemo(() => {
+    let result = [...videos];
+
     const query = search.trim().toLowerCase();
-    if (!query) return videos;
-    return videos.filter((video) =>
-      video.originalName.toLowerCase().includes(query)
-    );
-  }, [search, videos]);
+    if (query) {
+      result = result.filter((video) =>
+        video.originalName.toLowerCase().includes(query)
+      );
+    }
+
+    if (filterType !== 'all') {
+      result = result.filter((video) => {
+        switch (filterType) {
+          case 'videos':
+            return video.mediaType === 'encrypted_video' || video.mediaType === 'unencrypted_video';
+          case 'images':
+            return video.mediaType === 'encrypted_image' || video.mediaType === 'unencrypted_image';
+          case 'encrypted':
+            return video.encrypted;
+          case 'unencrypted':
+            return !video.encrypted;
+          default:
+            return true;
+        }
+      });
+    }
+
+    result.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case 'name':
+          cmp = a.originalName.localeCompare(b.originalName);
+          break;
+        case 'dateAdded':
+          cmp = (a.dateAdded || '').localeCompare(b.dateAdded || '');
+          break;
+        case 'dateModified':
+          cmp = (a.dateModified || '').localeCompare(b.dateModified || '');
+          break;
+        case 'type':
+          cmp = a.extension.localeCompare(b.extension);
+          break;
+        case 'size':
+          cmp = (a.fileSize || 0) - (b.fileSize || 0);
+          break;
+      }
+      return sortAscending ? cmp : -cmp;
+    });
+
+    return result;
+  }, [search, videos, filterType, sortField, sortAscending]);
 
   const handleLogout = () => {
     Object.values(decryptJobs).forEach((job) => {
@@ -83,12 +145,14 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
     useAppStore.setState({
       currentScreen: 'login',
       folderPath: '',
-      password: '',
+      password: null,
       metaFile: null,
       videos: [],
       isLoading: false,
       error: null,
       browserFiles: undefined,
+      thumbnailsReady: false,
+      hasEncryptedContent: false,
     });
     navigate('/app/login');
   };
@@ -101,6 +165,9 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
       if (index === 0 && /^[A-Za-z]:/.test(part)) return part.replace(':\\', '://');
       return index === parts.length - 1 ? part : part;
     });
+
+  const videoCount = filteredVideos.filter(v => v.mediaType === 'encrypted_video' || v.mediaType === 'unencrypted_video').length;
+  const imageCount = filteredVideos.filter(v => v.mediaType === 'encrypted_image' || v.mediaType === 'unencrypted_image').length;
 
   return (
     <div className="gallery-page">
@@ -123,7 +190,7 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
             ref={searchRef}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search videos"
+            placeholder="Search media"
             type="search"
           />
         </label>
@@ -173,23 +240,55 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
 
         <div className="gallery-heading">
           <div>
-            <p className="eyebrow">Your Videos</p>
-            <h2>{filteredVideos.length} videos available</h2>
+            <p className="eyebrow">Your Media</p>
+            <h2>{filteredVideos.length} files{!!videoCount && ` (${videoCount} video${videoCount !== 1 ? 's' : ''})`}{!!imageCount && ` (${imageCount} image${imageCount !== 1 ? 's' : ''})`}</h2>
           </div>
-          <p>
-            Decrypt a video from its card. When it is ready, press Play to open
-            the player.
-          </p>
+        </div>
+
+        <div className="filter-bar">
+          <div className="filter-tabs">
+            {FILTER_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                className={`filter-tab ${filterType === opt.key ? 'active' : ''}`}
+                onClick={() => setFilterType(opt.key)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="sort-controls">
+            <select
+              className="sort-select"
+              value={sortField}
+              onChange={(e) => setSortField(e.target.value as SortField)}
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.key} value={opt.key}>{opt.label}</option>
+              ))}
+            </select>
+            <button
+              className="sort-direction"
+              onClick={() => setSortAscending(!sortAscending)}
+              title={sortAscending ? 'Ascending' : 'Descending'}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="16" height="16">
+                {sortAscending ? (
+                  <polyline points="18 15 12 9 6 15" />
+                ) : (
+                  <polyline points="6 9 12 15 18 9" />
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
 
         {filteredVideos.length === 0 ? (
           <div className="empty-state">
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-              />
+              <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
-            <p>No videos match your search.</p>
+            <p>No media files match your search or filter.</p>
           </div>
         ) : (
           <div className="video-grid">
@@ -201,6 +300,7 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
                 onDecrypt={onVideoDecrypt}
                 onPlay={onVideoPlay}
                 onClear={onVideoClear}
+                onViewImage={onViewImage}
               />
             ))}
           </div>
@@ -260,38 +360,19 @@ const CircularProgress: React.FC<{
   label: string;
   active: boolean;
   onClearAllCache: () => void;
-}> = ({
-  percent,
-  label,
-  active,
-  onClearAllCache,
-}) => {
+}> = ({ percent, label, active, onClearAllCache }) => {
   const radius = 18;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (percent / 100) * circumference;
 
   return (
-    <div
-      className={`circle-progress ${active ? 'active' : ''}`}
-      onClick={onClearAllCache}
-      title="Click to clear cache"
-    >
+    <div className={`circle-progress ${active ? 'active' : ''}`} onClick={onClearAllCache} title="Click to clear cache">
       <svg viewBox="0 0 44 44" aria-hidden="true">
         <circle cx="22" cy="22" r={radius} />
-        <circle
-          cx="22"
-          cy="22"
-          r={radius}
-          style={{
-            strokeDasharray: circumference,
-            strokeDashoffset: offset,
-          }}
-        />
+        <circle cx="22" cy="22" r={radius} style={{ strokeDasharray: circumference, strokeDashoffset: offset }} />
       </svg>
       <span>{label}</span>
-      <div className="progress-popover">
-        Click to clear cache
-      </div>
+      <div className="progress-popover">Click to clear cache</div>
     </div>
   );
 };
