@@ -1,2 +1,7 @@
 Sample Videos/
 dist-electron/
+node_modules/
+installers/
+*.exe
+*.blockmap
+*.pfx

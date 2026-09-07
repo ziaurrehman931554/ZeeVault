@@ -28,6 +28,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
 
+  readFileChunk: async (filePath: string, offset: number, length: number) => {
+    try {
+      return await ipcRenderer.invoke('readFileChunk', filePath, offset, length);
+    } catch (error) {
+      console.error('Error in readFileChunk:', error);
+      throw error;
+    }
+  },
+
+  getFileSize: async (filePath: string) => {
+    try {
+      return await ipcRenderer.invoke('getFileSize', filePath);
+    } catch {
+      return -1;
+    }
+  },
+
   fileExists: async (filePath: string) => {
     try {
       return await ipcRenderer.invoke('fileExists', filePath);

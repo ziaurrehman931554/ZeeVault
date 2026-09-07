@@ -98,8 +98,47 @@ export interface DecryptionOptions {
 export const MEDIA_EXTENSIONS = {
   video: ['mp4', 'webm', 'mkv', 'avi', 'mov', 'wmv', 'm4v', 'mpeg', 'mpg', 'ogv', '3gp', 'flv', 'ts'],
   image: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'tif', 'webp'],
+  subtitle: ['srt', 'vtt', 'ass', 'ssa', 'sub'],
 } as const;
 
 export const VIDEO_EXTENSIONS = new Set(MEDIA_EXTENSIONS.video);
 export const IMAGE_EXTENSIONS = new Set(MEDIA_EXTENSIONS.image);
+export const SUBTITLE_EXTENSIONS = new Set(MEDIA_EXTENSIONS.subtitle);
 export const ALL_MEDIA_EXTENSIONS = new Set([...MEDIA_EXTENSIONS.video, ...MEDIA_EXTENSIONS.image]);
+
+export type SubtitleFormat = 'srt' | 'vtt' | 'ass' | 'ssa' | 'sub';
+
+export interface SubtitleTrack {
+  id: string;
+  label: string;
+  language: string;
+  languageCode: string;
+  format: SubtitleFormat;
+  source: 'local' | 'opensubtitles' | 'subdl';
+  vttUrl?: string;
+  srtContent?: string;
+}
+
+export interface SubtitleSearchResult {
+  id: string;
+  releaseName: string;
+  fileName: string;
+  language: string;
+  languageCode: string;
+  format: SubtitleFormat;
+  uploader: string;
+  downloadCount?: number;
+  source: 'opensubtitles' | 'subdl';
+  downloadUrl: string;
+  matchScore?: number;
+}
+
+export interface SubtitleSearchState {
+  visible: boolean;
+  query: string;
+  results: SubtitleSearchResult[];
+  loading: boolean;
+  error: string | null;
+  source: 'opensubtitles' | 'subdl' | 'both';
+  selectedFormat: SubtitleFormat | null;
+}

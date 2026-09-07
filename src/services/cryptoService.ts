@@ -126,6 +126,79 @@ export class CryptoService {
     return mimeTypes[ext || ''] || 'video/mp4';
   }
 
+  /**
+   * Streaming blob builder: reads the source file in chunks via the provided
+   * chunk reader (returns { done, data: ArrayBuffer|null }), optionally XOR
+   * decrypts each chunk in place (when a password is provided), and builds a
+   * single blob URL. Avoids loading the entire file into memory at once and
+   * avoids duplicating buffers — preventing both the >2 GiB read limit and
+   * out-of-memory hangs on large files.
+   *
+   * Pass password = null to stream an unencrypted file (no transform).
+   */
+  static async streamToBlobUrl(
+    filePath: string,
+    password: string | null,
+    mimeType: string,
+    chunkReader: (filePath: string, offset: number, length: number) => Promise<{ done: boolean; data: ArrayBuffer | null }>,
+    onProgress?: (decryptedBytes: number, totalBytes: number) => void
+  ): Promise<{ url: string; cleanup: () => void }> {
+    const keyBytes = password ? this.stringToUint8Array(password) : null;
+    const keyLen = keyBytes ? keyBytes.length : 0;
+    const CHUNK = 32 * 1024 * 1024;
+
+    const totalBytes = await this.getFileSize(filePath);
+
+    const parts: BlobPart[] = [];
+    let offset = 0;
+    let decryptedBytes = 0;
+    let keyIndex = 0;
+
+    while (true) {
+      const res = await chunkReader(filePath, offset, CHUNK);
+      if (res.done || !res.data || res.data.byteLength === 0) break;
+
+      if (!keyBytes) {
+        // No decryption: use the raw chunk directly.
+        parts.push(res.data);
+        offset += res.data.byteLength;
+        decryptedBytes += res.data.byteLength;
+      } else {
+        const raw = new Uint8Array(res.data);
+        const size = raw.length;
+        const decrypted = new Uint8Array(size);
+
+        for (let i = 0; i < size; i++) {
+          decrypted[i] = raw[i] ^ keyBytes[keyIndex % keyLen];
+          keyIndex++;
+        }
+
+        parts.push(decrypted.buffer);
+        offset += size;
+        decryptedBytes += size;
+      }
+
+      if (onProgress) onProgress(decryptedBytes, totalBytes > 0 ? totalBytes : offset);
+      // Yield to the UI thread so large files don't freeze the app.
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    const blob = new Blob(parts, { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    return { url, cleanup: () => URL.revokeObjectURL(url) };
+  }
+
+  static async getFileSize(filePath: string): Promise<number> {
+    try {
+      const api = (window as any).electronAPI;
+      if (api?.getFileSize) {
+        const size = await api.getFileSize(filePath);
+        if (typeof size === 'number' && size > 0) return size;
+      }
+    } catch { /* ignore */ }
+    return -1;
+  }
+
   static decryptThumbnail(encryptedBase64: string, password: string): string | null {
     try {
       const encryptedBytes = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));

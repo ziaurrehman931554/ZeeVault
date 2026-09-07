@@ -8,6 +8,7 @@ import VideoPlayer from './components/VideoPlayer';
 import MiniPlayer from './components/MiniPlayer';
 import LockScreen from './components/LockScreen';
 import ImageViewer from './components/ImageViewer';
+import SubtitleSearchDialog from './components/SubtitleSearchDialog';
 import PasswordPrompt from './components/PasswordPrompt';
 import CustomScrollbar from './components/CustomScrollbar';
 import { DecryptJob, NotificationItem, ThemeMode, VideoItem } from './types/index';
@@ -179,6 +180,18 @@ const AppContent: React.FC = () => {
     }, [browserFiles]
   );
 
+  const readVideoFileChunk = useCallback(
+    async (_filePath: string, offset: number, length: number): Promise<{ done: boolean; data: ArrayBuffer | null }> => {
+      const api = (window as any).electronAPI;
+      if (api?.readFileChunk) {
+        return api.readFileChunk(_filePath, offset, length);
+      }
+      // Browser fallback isn't supported for streaming; signal EOF so the
+      // caller can abort gracefully.
+      return { done: true, data: null };
+    }, []
+  );
+
   const rememberReadyVideo = useCallback(
     (jobs: Record<string, DecryptJob>, videoName: string, readyJob: DecryptJob) => {
       const nextJobs = { ...jobs };
@@ -256,12 +269,18 @@ const AppContent: React.FC = () => {
     notify(`Processing ${video.originalName}`, 'info');
 
     try {
-      const fileBuffer = await readVideoFile(video);
-      const fileBytes = fileBuffer instanceof Uint8Array ? fileBuffer : new Uint8Array(fileBuffer);
+      const isImage = video.mediaType === 'encrypted_image' || video.mediaType === 'unencrypted_image';
 
       if (!video.encrypted) {
         const mimeType = CryptoService.getMimeType(video.originalName);
-        const url = CryptoService.bufferToBlob(fileBytes, mimeType);
+        const { url } = await CryptoService.streamToBlobUrl(
+          video.filePath, null, mimeType, readVideoFileChunk,
+          (done, total) => {
+            const progress = Math.max(1, Math.round((done / total) * 100));
+            setDecryptProgress(progress);
+            updateDecryptJobs((jobs) => ({ ...jobs, [video.encryptedName]: { status: 'decrypting', progress } }));
+          }
+        );
         updateDecryptJobs((jobs) =>
           rememberReadyVideo(jobs, video.encryptedName, { status: 'ready', progress: 100, url })
         );
@@ -277,53 +296,73 @@ const AppContent: React.FC = () => {
         return;
       }
 
-      const totalSize = fileBytes.length;
-      let processedSize = 0;
-      const decryptedChunks: Uint8Array[] = [];
-      const chunkSize = 4 * 1024 * 1024;
+      // Encrypted content
+      if (isImage || video.extension === 'ts') {
+        const fileBuffer = await readVideoFile(video);
+        const fileBytes = fileBuffer instanceof Uint8Array ? fileBuffer : new Uint8Array(fileBuffer);
 
-      for (const chunk of CryptoService.xorDecryptChunked(fileBytes, currentPassword!, chunkSize)) {
-        decryptedChunks.push(chunk);
-        processedSize += chunk.length;
-        const progress = Math.max(1, Math.round((processedSize / totalSize) * 100));
-        setDecryptProgress(progress);
-        updateDecryptJobs((jobs) => ({
-          ...jobs,
-          [video.encryptedName]: { status: 'decrypting', progress },
-        }));
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-      }
+        // XOR decrypt into a single buffer (images & .ts are smaller/buffered).
+        const totalSize = fileBytes.length;
+        let processedSize = 0;
+        const decryptedChunks: Uint8Array[] = [];
+        const chunkSize = 4 * 1024 * 1024;
 
-      const decryptedBuffer = new Uint8Array(totalSize);
-      let offset = 0;
-      for (const chunk of decryptedChunks) {
-        decryptedBuffer.set(chunk, offset);
-        offset += chunk.length;
-      }
-
-      const isImage = video.mediaType === 'encrypted_image';
-      if (!isImage && video.extension === 'ts') {
-        try {
-          const { url, cleanup } = await createMseBlob(decryptedBuffer);
-          updateDecryptJobs((jobs) =>
-            rememberReadyVideo(jobs, video.encryptedName, { status: 'ready', progress: 100, url, _cleanup: cleanup })
-          );
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
+        for (const chunk of CryptoService.xorDecryptChunked(fileBytes, currentPassword!, chunkSize)) {
+          decryptedChunks.push(chunk);
+          processedSize += chunk.length;
+          const progress = Math.max(1, Math.round((processedSize / totalSize) * 100));
+          setDecryptProgress(progress);
           updateDecryptJobs((jobs) => ({
             ...jobs,
-            [video.encryptedName]: { status: 'error', progress: 0, error: msg },
+            [video.encryptedName]: { status: 'decrypting', progress },
           }));
-          setIsDecrypting(false);
-          setDecryptProgress(0);
-          notify(`Could not play .ts file: ${msg}`, 'error');
-          return;
+          await new Promise((resolve) => window.setTimeout(resolve, 0));
+        }
+
+        const decryptedBuffer = new Uint8Array(totalSize);
+        let offset = 0;
+        for (const chunk of decryptedChunks) {
+          decryptedBuffer.set(chunk, offset);
+          offset += chunk.length;
+        }
+
+        if (!isImage && video.extension === 'ts') {
+          try {
+            const { url, cleanup } = await createMseBlob(decryptedBuffer);
+            updateDecryptJobs((jobs) =>
+              rememberReadyVideo(jobs, video.encryptedName, { status: 'ready', progress: 100, url, _cleanup: cleanup })
+            );
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            updateDecryptJobs((jobs) => ({
+              ...jobs,
+              [video.encryptedName]: { status: 'error', progress: 0, error: msg },
+            }));
+            setIsDecrypting(false);
+            setDecryptProgress(0);
+            notify(`Could not play .ts file: ${msg}`, 'error');
+            return;
+          }
+        } else {
+          const mimeType = isImage ? `image/${video.extension}` : CryptoService.getMimeType(video.originalName);
+          const url = CryptoService.bufferToBlob(decryptedBuffer, mimeType);
+          updateDecryptJobs((jobs) =>
+            rememberReadyVideo(jobs, video.encryptedName, { status: 'ready', progress: 100, url })
+          );
         }
       } else {
-        const mimeType = isImage ? `image/${video.extension}` : CryptoService.getMimeType(video.originalName);
-        const url = CryptoService.bufferToBlob(decryptedBuffer, mimeType);
+        // Large encrypted video: stream-decrypt directly into a blob URL.
+        const mimeType = CryptoService.getMimeType(video.originalName);
+        const { url, cleanup } = await CryptoService.streamToBlobUrl(
+          video.filePath, currentPassword!, mimeType, readVideoFileChunk,
+          (done, total) => {
+            const progress = Math.max(1, Math.round((done / total) * 100));
+            setDecryptProgress(progress);
+            updateDecryptJobs((jobs) => ({ ...jobs, [video.encryptedName]: { status: 'decrypting', progress } }));
+          }
+        );
         updateDecryptJobs((jobs) =>
-          rememberReadyVideo(jobs, video.encryptedName, { status: 'ready', progress: 100, url })
+          rememberReadyVideo(jobs, video.encryptedName, { status: 'ready', progress: 100, url, _cleanup: cleanup })
         );
       }
 
@@ -431,10 +470,14 @@ const AppContent: React.FC = () => {
 
     setIsDecrypting(true);
     try {
-      const fileBuffer = await readVideoFile(video);
-      const fileBytes = fileBuffer instanceof Uint8Array ? fileBuffer : new Uint8Array(fileBuffer);
       const mimeType = CryptoService.getMimeType(video.originalName);
-      const url = CryptoService.bufferToBlob(fileBytes, mimeType);
+      const { url } = await CryptoService.streamToBlobUrl(
+        video.filePath, null, mimeType, readVideoFileChunk,
+        (done, total) => {
+          const progress = Math.max(1, Math.round((done / total) * 100));
+          setDecryptProgress(progress);
+        }
+      );
 
       updateDecryptJobs((jobs) =>
         rememberReadyVideo(jobs, video.encryptedName, { status: 'ready', progress: 100, url })
@@ -448,7 +491,7 @@ const AppContent: React.FC = () => {
       setIsDecrypting(false);
       notify(`Failed to play: ${video.originalName}`, 'error');
     }
-  }, [readVideoFile, rememberReadyVideo, setCurrentVideo, setVideoUrl, setIsDecrypting, navigate, notify]);
+  }, [readVideoFileChunk, rememberReadyVideo, setCurrentVideo, setVideoUrl, setIsDecrypting, navigate, notify]);
 
   const handleVideoPlay = useCallback((video: VideoItem) => {
     if (!video.encrypted) {
@@ -633,6 +676,7 @@ const AppContent: React.FC = () => {
       )}
       {currentScreen === 'player' && <VideoPlayer videoUrl={videoUrl} currentVideo={currentVideo} resumeTime={miniPlayer?.currentTime} />}
       {miniPlayer && currentScreen !== 'player' && <MiniPlayer data={miniPlayer} />}
+      <SubtitleSearchDialog />
       <ImageViewer />
       <PasswordPrompt
         visible={passwordPromptVisible}

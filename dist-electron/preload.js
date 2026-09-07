@@ -29,6 +29,23 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
             throw error;
         }
     },
+    readFileChunk: async (filePath, offset, length) => {
+        try {
+            return await electron_1.ipcRenderer.invoke('readFileChunk', filePath, offset, length);
+        }
+        catch (error) {
+            console.error('Error in readFileChunk:', error);
+            throw error;
+        }
+    },
+    getFileSize: async (filePath) => {
+        try {
+            return await electron_1.ipcRenderer.invoke('getFileSize', filePath);
+        }
+        catch {
+            return -1;
+        }
+    },
     fileExists: async (filePath) => {
         try {
             return await electron_1.ipcRenderer.invoke('fileExists', filePath);

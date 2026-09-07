@@ -110,6 +110,42 @@ ipcMain.handle('readFile', async (_event, filePath: string) => {
   }
 });
 
+ipcMain.handle('readFileChunk', async (_event, filePath: string, offset: number, length: number) => {
+  if (typeof offset !== 'number' || offset < 0 || typeof length !== 'number' || length < 1) {
+    throw new Error('readFileChunk: invalid offset/length');
+  }
+  // Cap each chunk well below Node's 2 GiB Buffer limit.
+  const maxChunk = 64 * 1024 * 1024;
+  const readLength = Math.min(length, maxChunk);
+  const handle = await fs.open(filePath, 'r');
+  try {
+    const stat = await handle.stat();
+    if (offset >= stat.size) {
+      return { done: true, data: null };
+    }
+    const buf = Buffer.alloc(readLength);
+    const { bytesRead } = await handle.read(buf, 0, readLength, offset);
+    if (bytesRead === 0) {
+      return { done: true, data: null };
+    }
+    return {
+      done: false,
+      data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + bytesRead),
+    };
+  } finally {
+    await handle.close();
+  }
+});
+
+ipcMain.handle('getFileSize', async (_event, filePath: string) => {
+  try {
+    const stat = await fs.stat(filePath);
+    return stat.size;
+  } catch {
+    return -1;
+  }
+});
+
 ipcMain.handle('fileExists', async (_event, filePath: string) => {
   try {
     await fs.access(filePath);

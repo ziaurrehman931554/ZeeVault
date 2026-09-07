@@ -43,6 +43,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
   const [centerCtrlVisible, setCenterCtrlVisible] = useState(false);
   const [bottomCtrlVisible, setBottomCtrlVisible] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [buffered, setBuffered] = useState(0);
@@ -54,6 +55,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
   const statusKeyRef = useRef(0);
 
   const { setCurrentScreen } = useAppStore();
+  const {
+    tracks, activeTrackId, enabled,
+    removeTrack, setActiveTrackId, setEnabled, setSearch,
+  } = usePlayerStore();
 
   const showStatusInfo = useCallback((icon: string, text: string) => {
     statusKeyRef.current += 1;
@@ -66,6 +71,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferedProgress = duration > 0 ? (buffered / duration) * 100 : 0;
+
+  const activeTrack = useMemo(() => {
+    if (!activeTrackId || !enabled) return null;
+    return tracks.find((t) => t.id === activeTrackId) || null;
+  }, [tracks, activeTrackId, enabled]);
 
   const showAllControls = useCallback(() => {
     setTopCtrlVisible(true);
@@ -90,6 +100,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         setBottomCtrlVisible(false);
         setShowThinSeek(true);
         setShowSettings(false);
+        setShowSubtitleMenu(false);
         setShowVolumeSlider(false);
         controlsTimerRef.current = null;
       }, 3000);
@@ -136,8 +147,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
       setCenterCtrlVisible(false);
       setBottomCtrlVisible(false);
       setShowThinSeek(true);
-      setShowSettings(false);
-      setShowVolumeSlider(false);
     }
     if (controlsTimerRef.current) {
       clearTimeout(controlsTimerRef.current);
@@ -239,6 +248,42 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
     showStatusInfo('speed', `${speed}x`);
   }, [video, showStatusInfo]);
 
+  const handleSubtitleTrackSelect = useCallback((trackId: string | null) => {
+    setActiveTrackId(trackId);
+    if (trackId) {
+      setEnabled(true);
+      const track = tracks.find((t) => t.id === trackId);
+      showStatusInfo('cc', track ? `${track.language}` : 'Subtitles on');
+    } else {
+      setEnabled(false);
+      showStatusInfo('cc', 'Subtitles off');
+    }
+    setShowSubtitleMenu(false);
+  }, [tracks, setActiveTrackId, setEnabled, showStatusInfo]);
+
+  const toggleSubtitles = useCallback(() => {
+    if (tracks.length === 0) {
+      openSubtitleSearch();
+      return;
+    }
+    if (enabled && activeTrackId) {
+      setEnabled(false);
+      showStatusInfo('cc', 'Subtitles off');
+    } else if (activeTrackId) {
+      setEnabled(true);
+      showStatusInfo('cc', 'Subtitles on');
+    } else if (tracks.length > 0) {
+      setActiveTrackId(tracks[0].id);
+      setEnabled(true);
+      showStatusInfo('cc', tracks[0].language);
+    }
+  }, [tracks, enabled, activeTrackId, setEnabled, setActiveTrackId, showStatusInfo]);
+
+  const openSubtitleSearch = useCallback(() => {
+    setSearch({ visible: true, query: currentVideo?.originalName || '', results: [], error: null });
+    setShowSubtitleMenu(false);
+  }, [currentVideo, setSearch]);
+
   const closePlayer = useCallback(() => {
     if (!useAppStore.getState().isLocked) {
       const el = videoRef.current;
@@ -278,6 +323,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         setBottomCtrlVisible(false);
         setShowThinSeek(true);
         setShowSettings(false);
+        setShowSubtitleMenu(false);
         setShowVolumeSlider(false);
         if (controlsTimerRef.current) {
           clearTimeout(controlsTimerRef.current);
@@ -386,6 +432,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         togglePlay();
       }
       if (event.key === 'Escape') {
+        if (showSubtitleMenu) { setShowSubtitleMenu(false); return; }
         if (showSettings) { setShowSettings(false); return; }
         if (showVolumeSlider) { setShowVolumeSlider(false); return; }
         if (document.fullscreenElement) { document.exitFullscreen(); return; }
@@ -397,13 +444,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
       if (event.key === 'ArrowDown') { event.preventDefault(); handleVolumeChange({ target: { value: String(Math.max(0, volume - 0.1)) } } as any); }
       if (event.key.toLowerCase() === 'm') { event.preventDefault(); toggleMute(); }
       if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFullscreen(); }
+      if (event.key.toLowerCase() === 'c') { event.preventDefault(); toggleSubtitles(); }
       if (event.key === '.') { event.preventDefault(); const idx = SPEEDS.indexOf(playbackRate); if (idx < SPEEDS.length - 1) handleSpeedChange(SPEEDS[idx + 1]); }
       if (event.key === ',') { event.preventDefault(); const idx = SPEEDS.indexOf(playbackRate); if (idx > 0) handleSpeedChange(SPEEDS[idx - 1]); }
     };
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [togglePlay, skip, toggleMute, toggleFullscreen, playbackRate, handleSpeedChange, handleVolumeChange, volume, closePlayer, showSettings, showVolumeSlider]);
+  }, [togglePlay, skip, toggleMute, toggleFullscreen, toggleSubtitles, playbackRate, handleSpeedChange, handleVolumeChange, volume, closePlayer, showSettings, showSubtitleMenu, showVolumeSlider]);
 
   const volumeIcon = useMemo(() => {
     if (isMuted) {
@@ -443,7 +491,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         muted
         playsInline
         onClick={togglePlay}
-      />
+      >
+        {tracks.map((track) => (
+          <track
+            key={track.id}
+            kind="subtitles"
+            src={track.vttUrl}
+            srcLang={track.languageCode}
+            label={track.label}
+            default={track.id === activeTrackId}
+          />
+        ))}
+      </video>
 
       {isLoading && (
         <div className="loading-overlay">
@@ -465,6 +524,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
             <span>{currentVideo?.originalName}</span>
           </div>
           <div className="top-right">
+            {activeTrack && (
+              <div className="subtitle-indicator" title={`Subtitles: ${activeTrack.label}`}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="16" height="16">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="M7 8h10M7 12h6" />
+                </svg>
+                <span>{activeTrack.label}</span>
+              </div>
+            )}
             <div className="volume-wrap">
               <div className="volume-slider-horizontal">
                 <input
@@ -537,8 +605,62 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
             )}
           </div>
           <span className="time-display">{formatDuration}</span>
+
+          <div className="subtitle-menu-wrap">
+            <button
+              className={`ctrl-btn subtitle-btn${activeTrack && enabled ? ' active' : ''}`}
+              onClick={() => { setShowSubtitleMenu(!showSubtitleMenu); setShowSettings(false); setShowVolumeSlider(false); }}
+              title="Subtitles (C)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <rect x="2" y="4" width="20" height="16" rx="2" />
+                <path d="M7 8h10M7 12h6" />
+              </svg>
+            </button>
+            {showSubtitleMenu && (
+              <div className="subtitle-menu">
+                <div className="subtitle-menu-title">Subtitles</div>
+                <button
+                  className={`subtitle-menu-item${!activeTrackId || !enabled ? ' active' : ''}`}
+                  onClick={() => handleSubtitleTrackSelect(null)}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="14" height="14">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                  Off
+                </button>
+                {tracks.map((track) => (
+                  <div
+                    key={track.id}
+                    className={`subtitle-menu-item${track.id === activeTrackId && enabled ? ' active' : ''}`}
+                  >
+                    <span className="subtitle-menu-lang">{track.label}</span>
+                    <span className="subtitle-menu-source">{track.source}</span>
+                    <button
+                      className="subtitle-menu-remove"
+                      onClick={() => removeTrack(track.id)}
+                      title="Remove subtitle"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="14" height="14">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+                <div className="subtitle-menu-divider" />
+                <button className="subtitle-menu-item subtitle-menu-search" onClick={openSubtitleSearch}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="14" height="14">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="M21 21l-4.35-4.35" />
+                  </svg>
+                  Search Online...
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="settings-wrap">
-            <button className="ctrl-btn" onClick={() => { setShowSettings(!showSettings); setShowVolumeSlider(false); }} title="Settings">
+            <button className="ctrl-btn" onClick={() => { setShowSettings(!showSettings); setShowSubtitleMenu(false); setShowVolumeSlider(false); }} title="Settings">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
@@ -581,7 +703,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
             {statusInfo.icon === 'mute' && <><path d="M3 9v6h4l5 5V4L7 9H3z" /><path d="M18 7l-8 10M10 7l8 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></>}
             {statusInfo.icon === 'unmute' && <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.5v5a4.47 4.47 0 002.5-1.5z" />}
             {statusInfo.icon === 'forward' && <path d="M11.5 8c2.65 0 4.05.99 5.5 2.17L19.5 8v6h-6l2.67-2.22C16.17 10.22 14.85 9.5 13 9.5c-2.54 0-4.42 1.58-5.5 3.5l-1.5-.75C7.5 9.75 9.85 8 11.5 8z" />}
-            {statusInfo.icon === 'backward' && <path d="M12.5 8c-2.65 0-4.05.99-5.5 2.17L4.5 8v6h6l-2.67-2.22C7.83 10.22 9.15 9.5 11 9.5c2.54 0 4.42 1.58 5.5 3.5l1.5-.75C16.5 9.75 14.15 8 12.5 8z" />}
+            {statusInfo.icon === 'backward' && <path d="M12.5 8c-2.65 0-4.05.99-5.5 2.17L4.5 8v6h6l-2.67-2.22C7.83 10.22 9.15 9.5 11 9.5c2.54 0 4.42 1.58 5.5 3.5l-1.5-.75C16.5 9.75 14.15 8 12.5 8z" />}
+            {statusInfo.icon === 'cc' && (
+              <g>
+                <rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
+                <path d="M7 8h10M7 12h6" stroke="currentColor" strokeWidth="2" fill="none" />
+              </g>
+            )}
           </svg>
           <span>{statusInfo.text}</span>
         </div>
