@@ -972,6 +972,7 @@ const AppContent: React.FC = () => {
       style={shellStyle}
     >
       <CustomScrollbar />
+      <div className="material-backdrop" />
       <div className="ambient-shape shape-one" />
       <div className="ambient-shape shape-two" />
       <div className="ambient-shape shape-three" />

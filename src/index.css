@@ -91,17 +91,32 @@ button:disabled {
    styles driven by the material-intensity and background-opacity settings. */
 @property --mblur {
   syntax: "<length>";
-  inherits: false;
+  inherits: true;
   initial-value: 0px;
 }
 
-.app-shell.material-mica,
-.app-shell.material-acrylic {
-  -webkit-backdrop-filter: blur(var(--mblur)) saturate(170%);
-  backdrop-filter: blur(var(--mblur)) saturate(170%);
+/* The frost lives on a dedicated fixed layer that is a SIBLING of the content
+   (never an ancestor): a backdrop-filter on the shell itself creates a new
+   containing block for every position:fixed element inside it (topbar,
+   notification stack, ambient shapes), which makes them scroll with the page
+   and never update. This layer has no children, so it is safe. */
+.material-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--mblur)) saturate(175%);
+  backdrop-filter: blur(var(--mblur)) saturate(175%);
+}
+
+.app-shell {
   transition: --mblur 0.55s ease;
 }
 
+/* The shell itself keeps only the tint gradient (no backdrop-filter), so
+   fixed children are still laid out against the viewport. Tint alphas
+   (--material-a/b/c) and the blur come from renderer inline styles driven by
+   the material-intensity and background-opacity settings. */
 .app-shell.material-mica {
   background:
     radial-gradient(circle at top left, rgba(140, 150, 165, 0.06), transparent 32rem),
@@ -768,7 +783,16 @@ button:disabled {
 }
 
 .gallery-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
   padding-top: 60px;
+  padding-bottom: 0;
+}
+
+.gallery-page .footer {
+  margin-top: auto;
+  margin-bottom: 0;
 }
 
 .search-box {

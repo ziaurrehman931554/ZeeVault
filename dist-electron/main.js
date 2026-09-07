@@ -65,22 +65,33 @@ const forceWindowRecompose = () => {
     if (!mainWindow || mainWindow.isDestroyed())
         return;
     const restore = mainWindow.getOpacity();
+    const wasTopMost = mainWindow.isAlwaysOnTop();
     try {
         mainWindow.setOpacity(restore === 1 ? 0.9999 : 1);
         mainWindow.webContents.invalidate();
+        if (!wasTopMost) {
+            // A window-manager-level topmost toggle forces DWM to fully re-layout and
+            // re-composite the window (stronger than opacity/invalidate alone), which
+            // is what actually flushes a stale layered-window surface on Win10/11.
+            mainWindow.setAlwaysOnTop(true, 'screen-saver');
+        }
     }
     catch {
         // ignore
     }
     setTimeout(() => {
         try {
-            if (mainWindow && !mainWindow.isDestroyed())
+            if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.setOpacity(restore);
+                if (!wasTopMost)
+                    mainWindow.setAlwaysOnTop(false);
+                mainWindow.webContents.invalidate();
+            }
         }
         catch {
             // ignore
         }
-    }, 80);
+    }, 120);
 };
 const createWindow = (initialMaterial = 'solid') => {
     Menu.setApplicationMenu(null);
@@ -93,6 +104,10 @@ const createWindow = (initialMaterial = 'solid') => {
         minHeight: 600,
         backgroundColor: initialMaterial === 'solid' ? '#09090b' : '#00000000',
         frame: true,
+        // Stay hidden until the material and transparency are in place, so the
+        // very first frame the user sees is already composited (avoids DWM
+        // latching onto an opaque first paint).
+        show: false,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -105,16 +120,38 @@ const createWindow = (initialMaterial = 'solid') => {
         ? 'http://localhost:5173'
         : `file://${path.join(__dirname, '../dist/index.html')}`;
     mainWindow.loadURL(startUrl);
+    const reveal = (forceMaterial) => {
+        if (!mainWindow || mainWindow.isDestroyed())
+            return;
+        applyWindowMaterial(forceMaterial);
+        if (!mainWindow.isVisible()) {
+            mainWindow.show();
+            mainWindow.focus();
+            mainWindow.maximize();
+        }
+    };
+    mainWindow.once('ready-to-show', () => {
+        reveal(initialMaterial);
+        // DWM sometimes needs a few passes to flush the layered surface after the
+        // renderer re-applies the material during settings hydration; schedule
+        // gentle nudges so the acrylic never requires a click to "wake up".
+        for (const t of [450, 1300, 2800]) {
+            setTimeout(() => {
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    applyWindowMaterial(initialMaterial);
+                    forceWindowRecompose();
+                }
+            }, t);
+        }
+    });
     mainWindow.webContents.on('did-finish-load', () => {
         mainWindow?.webContents.insertCSS(`
       ::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
       html { scrollbar-width: none !important; }
     `);
-        // Re-apply now that the page is painted and the window is sized; the
-        // invalidate() inside forces the material to actually composite.
-        applyWindowMaterial(initialMaterial);
+        if (mainWindow && !mainWindow.isVisible())
+            reveal(initialMaterial);
     });
-    mainWindow.maximize();
     if (isDev) {
         mainWindow.webContents.openDevTools();
     }
