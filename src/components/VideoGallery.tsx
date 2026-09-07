@@ -19,6 +19,7 @@ interface VideoGalleryProps {
   passwords: Record<string, string>;
   onUnlockFolder: (folderPath: string) => void;
   onLockFolder: (folderPath: string) => void;
+  onRemoveFolder: (folderPath: string) => void;
   onAddFolders: () => void;
   onThemeToggle: () => void;
   onVideoDecrypt: (video: VideoItem) => void;
@@ -53,6 +54,7 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
   passwords,
   onUnlockFolder,
   onLockFolder,
+  onRemoveFolder,
   onAddFolders,
   onThemeToggle,
   onVideoDecrypt,
@@ -266,6 +268,16 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
                       Lock
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="folder-chip-remove"
+                    onClick={() => onRemoveFolder(folder)}
+                    title={`Remove "${folderDisplayName(folder)}" from vault`}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="13" height="13">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
               );
             })}

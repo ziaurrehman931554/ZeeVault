@@ -409,6 +409,65 @@ const AppContent: React.FC = () => {
     notify(`Locked: ${folderDisplayName(folderPath)}`, 'info');
   }, [notify, setVideos, setVideoUrl, updateDecryptJobs]);
 
+  const handleRemoveFolder = useCallback((folderPath: string) => {
+    const state = useAppStore.getState();
+
+    const paths = state.folderPaths.filter((p) => p !== folderPath);
+    state.setFolderPaths(paths);
+    state.setMetas((() => {
+      const nextMetas = { ...state.metas };
+      delete nextMetas[folderPath];
+      return nextMetas;
+    })());
+    state.setPasswordForFolder(folderPath, null);
+
+    const folderVideoIds = new Set<string>();
+    let videosChanged = false;
+    const nextVideos = state.videos.filter((v) => {
+      if (v.folderPath !== folderPath) return true;
+      folderVideoIds.add(v.id);
+      if (v.thumbnailUrl) {
+        URL.revokeObjectURL(v.thumbnailUrl);
+        videosChanged = true;
+      }
+      return false;
+    });
+    if (videosChanged || nextVideos.length !== state.videos.length) setVideos(nextVideos);
+
+    updateDecryptJobs((jobs) => {
+      const nextJobs = { ...jobs };
+      Object.keys(nextJobs).forEach((id) => {
+        if (!folderVideoIds.has(id)) return;
+        const job = nextJobs[id];
+        if (job?.url) {
+          if (job._cleanup) job._cleanup();
+          else URL.revokeObjectURL(job.url);
+        }
+        readyOrderRef.current = readyOrderRef.current.filter((name) => name !== id);
+        delete nextJobs[id];
+      });
+      return nextJobs;
+    });
+
+    const playerState = usePlayerStore.getState();
+    if (playerState.currentVideo?.folderPath === folderPath) {
+      setVideoUrl(null);
+    }
+    if (playerState.miniPlayer?.currentVideo?.folderPath === folderPath) {
+      playerState.setMiniPlayer(null);
+    }
+
+    try {
+      if ((window as any).electronAPI?.setStoredFolderPaths) {
+        void (window as any).electronAPI.setStoredFolderPaths(paths);
+      } else {
+        localStorage.setItem('vault-folder-paths', JSON.stringify(paths));
+      }
+    } catch {}
+
+    notify(`Removed ${folderDisplayName(folderPath)}`, 'success');
+  }, [notify, setVideos, setVideoUrl, updateDecryptJobs]);
+
   const addFoldersInputRef = useRef<HTMLInputElement>(null);
 
   const appendFolders = useCallback(
@@ -803,6 +862,7 @@ const AppContent: React.FC = () => {
           passwords={passwords}
           onUnlockFolder={handleUnlockFolder}
           onLockFolder={handleLockFolder}
+          onRemoveFolder={handleRemoveFolder}
           onAddFolders={handleAddFolders}
           onThemeToggle={toggleTheme}
           onVideoDecrypt={handleVideoDecrypt}
