@@ -224,6 +224,14 @@ button:disabled {
   line-height: 1;
 }
 
+.brand-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
 .brand-mark.large {
   width: 76px;
   height: 76px;
@@ -1145,8 +1153,11 @@ button:disabled {
 .social-links a svg {
   width: 20px;
   height: 20px;
-  fill: currentColor;
-  stroke: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .scroll-top {
