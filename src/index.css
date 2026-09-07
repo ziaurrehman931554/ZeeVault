@@ -419,6 +419,48 @@ button:disabled {
   filter: brightness(1.08);
 }
 
+.folder-chip-lock {
+  min-height: auto;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #f87171 45%, var(--border));
+  background: transparent;
+  color: #f87171;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.folder-chip-lock:hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, #f87171 18%, transparent);
+}
+
+.folder-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  align-self: center;
+  padding: 8px 14px;
+  border-radius: 14px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.folder-add-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  color: var(--text);
+  background: var(--panel);
+  transform: translateY(-1px);
+}
+
 .folder-chip-status {
   font-size: 11px;
   font-weight: 700;

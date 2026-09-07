@@ -11,8 +11,9 @@ import ImageViewer from './components/ImageViewer';
 import SubtitleSearchDialog from './components/SubtitleSearchDialog';
 import PasswordPrompt from './components/PasswordPrompt';
 import CustomScrollbar from './components/CustomScrollbar';
-import { DecryptJob, NotificationItem, ThemeMode, VideoItem } from './types/index';
+import { DecryptJob, MetaFile, NotificationItem, ThemeMode, VideoItem } from './types/index';
 import { CryptoService } from './services/cryptoService';
+import { MediaScanner } from './services/mediaScanner';
 import { createMseBlob } from './services/tsTransmuxer';
 import { decryptAllThumbnails, generateUnencryptedThumbnailFromBuffer } from './services/thumbnailManager';
 
@@ -366,6 +367,170 @@ const AppContent: React.FC = () => {
     setPasswordPromptVisible(true);
   }, []);
 
+  const handleLockFolder = useCallback((folderPath: string) => {
+    const state = useAppStore.getState();
+    state.setPasswordForFolder(folderPath, null);
+
+    const folderVideoIds = new Set<string>();
+    let thumbsChanged = false;
+    const nextVideos = state.videos.map((v) => {
+      if (v.folderPath !== folderPath) return v;
+      folderVideoIds.add(v.id);
+      if (!v.thumbnailUrl) return v;
+      URL.revokeObjectURL(v.thumbnailUrl);
+      thumbsChanged = true;
+      return { ...v, thumbnailUrl: undefined };
+    });
+    if (thumbsChanged) setVideos(nextVideos);
+
+    updateDecryptJobs((jobs) => {
+      const nextJobs = { ...jobs };
+      Object.keys(nextJobs).forEach((id) => {
+        if (!folderVideoIds.has(id)) return;
+        const job = nextJobs[id];
+        if (job?.url) {
+          if (job._cleanup) job._cleanup();
+          else URL.revokeObjectURL(job.url);
+        }
+        readyOrderRef.current = readyOrderRef.current.filter((name) => name !== id);
+        delete nextJobs[id];
+      });
+      return nextJobs;
+    });
+
+    const playerState = usePlayerStore.getState();
+    if (playerState.currentVideo?.folderPath === folderPath) {
+      setVideoUrl(null);
+    }
+    if (playerState.miniPlayer?.currentVideo?.folderPath === folderPath) {
+      playerState.setMiniPlayer(null);
+    }
+
+    notify(`Locked: ${folderDisplayName(folderPath)}`, 'info');
+  }, [notify, setVideos, setVideoUrl, updateDecryptJobs]);
+
+  const addFoldersInputRef = useRef<HTMLInputElement>(null);
+
+  const appendFolders = useCallback(
+    async (newFolders: Array<{ path: string; files: File[] }>) => {
+      const storeState = useAppStore.getState();
+      const existingPaths = new Set(storeState.folderPaths.map((p) => p.toLowerCase()));
+      const nextFolderPaths = [...storeState.folderPaths];
+      const nextMetas = { ...storeState.metas };
+      const nextVideos = [...storeState.videos];
+      const existingIds = new Set(nextVideos.map((v) => v.id));
+      const addedFiles: File[] = [];
+      let added = 0;
+      let failed = 0;
+
+      for (const folder of newFolders) {
+        if (!folder.path || existingPaths.has(folder.path.toLowerCase())) continue;
+        try {
+          const fromScan = await MediaScanner.readMetaContent(folder.path, folder.files, folder.path);
+          let meta: MetaFile | null = null;
+          let encryptedVideos: VideoItem[] = [];
+          if (fromScan) {
+            meta = MediaScanner.parseMeta(fromScan);
+            if (MediaScanner.isValidMetaFile(meta)) {
+              encryptedVideos = MediaScanner.metaToEncryptedVideos(meta, folder.path);
+            } else {
+              meta = null;
+            }
+          }
+          const scannedFiles = await MediaScanner.scanFolderFiles(
+            folder.path, folder.files, folder.files.length > 0 ? folder.path : undefined
+          );
+          const unencryptedVideos = MediaScanner.scannedToUnencryptedVideos(scannedFiles, folder.path);
+          const folderVideos = MediaScanner.mergeMedia(encryptedVideos, unencryptedVideos).filter((v) => {
+            if (existingIds.has(v.id)) return false;
+            existingIds.add(v.id);
+            return true;
+          });
+
+          nextFolderPaths.push(folder.path);
+          nextMetas[folder.path] = meta;
+          nextVideos.push(...folderVideos);
+          addedFiles.push(...folder.files);
+          added++;
+        } catch (e) {
+          failed++;
+          const message = e instanceof Error ? e.message : 'Failed to read folder';
+          notify(`Could not open "${folderDisplayName(folder.path)}": ${message}`, 'error');
+        }
+      }
+
+      if (added === 0) {
+        if (failed === 0) notify('That folder is already loaded', 'info');
+        return;
+      }
+
+      const state = useAppStore.getState();
+      state.setFolderPaths(nextFolderPaths);
+      state.setMetas(nextMetas);
+      state.setVideos(nextVideos);
+      if (addedFiles.length > 0) {
+        state.setBrowserFiles([...(state.browserFiles || []), ...addedFiles]);
+      }
+
+      try {
+        if ((window as any).electronAPI?.setStoredFolderPaths) {
+          await (window as any).electronAPI.setStoredFolderPaths(nextFolderPaths);
+        } else {
+          localStorage.setItem('vault-folder-paths', JSON.stringify(nextFolderPaths));
+        }
+      } catch {}
+
+      unencryptedThumbsGeneratedRef.current = false;
+
+      notify(
+        failed
+          ? `Added ${added} folder${added !== 1 ? 's' : ''} (skipped ${failed} failed)`
+          : `Added ${added} folder${added !== 1 ? 's' : ''}`,
+        'success'
+      );
+    }, [notify]
+  );
+
+  const handleAddFolders = useCallback(() => {
+    const api = (window as any).electronAPI;
+    if (api?.selectFolders) {
+      void (async () => {
+        try {
+          const result = await api.selectFolders();
+          if (result && result.length > 0) {
+            await appendFolders(result.map((p: string) => ({ path: p, files: [] })));
+          }
+        } catch (e) {
+          notify(e instanceof Error ? e.message : 'Failed to select folders', 'error');
+        }
+      })();
+    } else {
+      addFoldersInputRef.current?.click();
+    }
+  }, [appendFolders, notify]);
+
+  const handleAddFoldersInput = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.currentTarget.files || []);
+    e.currentTarget.value = '';
+    if (files.length === 0) return;
+
+    const byFolder = new Map<string, File[]>();
+    files.forEach((file) => {
+      const rel = (file.webkitRelativePath || file.name).replace(/\\/g, '/').split('/');
+      const folderName = rel[0] || file.name;
+      const list = byFolder.get(folderName) || [];
+      list.push(file);
+      byFolder.set(folderName, list);
+    });
+
+    await appendFolders(
+      Array.from(byFolder.entries()).map(([folderName, folderFiles]) => ({
+        path: folderName,
+        files: folderFiles,
+      }))
+    );
+  }, [appendFolders]);
+
   const handlePasswordSubmit = useCallback(async (pwd: string | null) => {
     const decryptVideo = pendingDecryptVideo;
     const unlockFolder = decryptVideo?.folderPath ?? pendingUnlockFolder;
@@ -629,6 +794,8 @@ const AppContent: React.FC = () => {
           metas={metas}
           passwords={passwords}
           onUnlockFolder={handleUnlockFolder}
+          onLockFolder={handleLockFolder}
+          onAddFolders={handleAddFolders}
           onThemeToggle={toggleTheme}
           onVideoDecrypt={handleVideoDecrypt}
           onVideoPlay={handleVideoPlay}
@@ -639,6 +806,14 @@ const AppContent: React.FC = () => {
       )}
       {currentScreen === 'player' && <VideoPlayer videoUrl={videoUrl} currentVideo={currentVideo} resumeTime={miniPlayer?.currentTime} />}
       {miniPlayer && currentScreen !== 'player' && <MiniPlayer data={miniPlayer} />}
+      <input
+        ref={addFoldersInputRef}
+        type="file"
+        multiple
+        webkitdirectory=""
+        style={{ display: 'none' }}
+        onChange={handleAddFoldersInput}
+      />
       <SubtitleSearchDialog />
       <ImageViewer />
       <PasswordPrompt

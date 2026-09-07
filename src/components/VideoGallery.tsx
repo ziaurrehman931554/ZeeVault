@@ -18,6 +18,8 @@ interface VideoGalleryProps {
   metas: Record<string, MetaFile | null>;
   passwords: Record<string, string>;
   onUnlockFolder: (folderPath: string) => void;
+  onLockFolder: (folderPath: string) => void;
+  onAddFolders: () => void;
   onThemeToggle: () => void;
   onVideoDecrypt: (video: VideoItem) => void;
   onVideoPlay: (video: VideoItem) => void;
@@ -50,6 +52,8 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
   metas,
   passwords,
   onUnlockFolder,
+  onLockFolder,
+  onAddFolders,
   onThemeToggle,
   onVideoDecrypt,
   onVideoPlay,
@@ -254,11 +258,25 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
                     </button>
                   )}
                   {hasMeta && unlocked && (
-                    <span className="folder-chip-status" title="Folder unlocked for this session">Unlocked</span>
+                    <button
+                      type="button"
+                      className="folder-chip-lock"
+                      onClick={() => onLockFolder(folder)}
+                      title={`Lock "${folderDisplayName(folder)}"`}
+                    >
+                      Lock
+                    </button>
                   )}
                 </div>
               );
             })}
+            <button type="button" className="folder-add-btn" onClick={onAddFolders} title="Add folders to the vault">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="14" height="14" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add Folder
+            </button>
           </div>
         </div>
 
