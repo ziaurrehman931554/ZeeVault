@@ -6,7 +6,7 @@ const LockScreen: React.FC = () => {
   const [error, setError] = useState('');
   const [visible, setVisible] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { password, setLocked } = useAppStore();
+  const { passwords, setLocked } = useAppStore();
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
@@ -14,7 +14,8 @@ const LockScreen: React.FC = () => {
   }, []);
 
   const handleSubmit = () => {
-    if (input === password) {
+    const valid = Object.values(passwords).some((pwd) => pwd && input === pwd);
+    if (valid) {
       setVisible(false);
       setTimeout(() => setLocked(false), 350);
     } else {

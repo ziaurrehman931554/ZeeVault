@@ -2,116 +2,217 @@ import React, { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { MediaScanner } from '../services/mediaScanner';
+import { MetaFile } from '../types/index';
+
+interface SelectedFolder {
+  path: string;
+  files: File[];
+}
 
 interface LoginScreenProps {
   onNotify: (message: string, type?: 'success' | 'error' | 'info') => void;
-  savedFolderPath?: string;
-  onClearSavedFolder?: () => void;
+  savedFolderPaths?: string[];
+  onClearSavedFolders?: () => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPath, onClearSavedFolder }) => {
+const folderDisplayName = (path: string): string => {
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  return parts[parts.length - 1] || path;
+};
+
+const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPaths, onClearSavedFolders }) => {
   const navigate = useNavigate();
-  const [folderPath, setFolderPath] = useState(savedFolderPath || '');
+  const [selected, setSelected] = useState<SelectedFolder[]>(() =>
+    (savedFolderPaths || []).map((path) => ({ path, files: [] }))
+  );
   const [localError, setLocalError] = useState('');
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const allFilesRef = useRef<File[]>([]);
 
   const {
     setCurrentScreen,
-    setFolderPath: setAppFolderPath,
-    setMetaFile,
+    setFolderPaths,
+    setMetas,
     setVideos,
     setError: setAppError,
     setBrowserFiles,
-    setHasEncryptedContent,
   } = useAppStore();
 
-  const processFolder = useCallback(async (path: string, files?: FileList) => {
+  const addFolders = useCallback((paths: string[]) => {
+    setSelected((prev) => {
+      const existing = new Set(prev.map((s) => s.path.toLowerCase()));
+      const next = [...prev];
+      for (const path of paths) {
+        if (path && !existing.has(path.toLowerCase())) {
+          existing.add(path.toLowerCase());
+          next.push({ path, files: [] });
+        }
+      }
+      return next;
+    });
+    setLocalError('');
+  }, []);
+
+  const scanFolder = useCallback(async (folderPath: string, files: File[]): Promise<{
+    videos: any[];
+    meta: MetaFile | null;
+  }> => {
+    const isBrowser = files.length > 0;
+    const metaContent = await MediaScanner.readMetaContent(folderPath, files, folderPath);
+    let encryptedVideos: any[] = [];
+    let meta: MetaFile | null = null;
+
+    if (metaContent) {
+      meta = MediaScanner.parseMeta(metaContent);
+      if (MediaScanner.isValidMetaFile(meta)) {
+        encryptedVideos = MediaScanner.metaToEncryptedVideos(meta, folderPath);
+      } else {
+        meta = null;
+      }
+    }
+
+    const scannedFiles = await MediaScanner.scanFolderFiles(folderPath, files, isBrowser ? folderPath : undefined);
+    const unencryptedVideos = MediaScanner.scannedToUnencryptedVideos(scannedFiles, folderPath);
+    const allVideos = MediaScanner.mergeMedia(encryptedVideos, unencryptedVideos);
+
+    return { videos: allVideos, meta };
+  }, []);
+
+  const handleContinue = useCallback(async () => {
+    if (selected.length === 0) return;
+
     setLoading(true);
     setLocalError('');
 
     try {
-      const metaContent = await MediaScanner.readMetaContent(path, files);
-      let encryptedVideos: any[] = [];
-      let metaFile = null;
-      let hasEncrypted = false;
+      const folderPaths: string[] = [];
+      const metas: Record<string, MetaFile | null> = {};
+      let allVideos: any[] = [];
+      let failed = 0;
 
-      if (metaContent) {
-        metaFile = MediaScanner.parseMeta(metaContent);
-        if (MediaScanner.isValidMetaFile(metaFile)) {
-          hasEncrypted = true;
-          encryptedVideos = MediaScanner.metaToEncryptedVideos(metaFile, path);
+      for (const folder of selected) {
+        try {
+          const { videos, meta } = await scanFolder(folder.path, folder.files);
+          folderPaths.push(folder.path);
+          metas[folder.path] = meta;
+          allVideos = allVideos.concat(videos);
+        } catch (e) {
+          failed++;
+          const message = e instanceof Error ? e.message : 'Failed to read folder';
+          onNotify(`Could not open "${folderDisplayName(folder.path)}": ${message}`, 'error');
         }
       }
 
-      const scannedFiles = await MediaScanner.scanFolderFiles(path, files);
-      const unencryptedVideos = MediaScanner.scannedToUnencryptedVideos(scannedFiles, path);
-      const allVideos = MediaScanner.mergeMedia(encryptedVideos, unencryptedVideos);
-
-      setAppFolderPath(path);
-      setMetaFile(metaFile);
-      setVideos(allVideos);
-      setHasEncryptedContent(hasEncrypted);
-
-      if (files) {
-        setBrowserFiles(files);
+      if (folderPaths.length === 0) {
+        setLocalError('No valid folders were selected.');
+        onNotify('No valid folders were selected', 'error');
+        return;
       }
+
+      // Keep ids unique across folders (they reuse file paths, but guard anyway).
+      const seenIds = new Set<string>();
+      allVideos = allVideos.filter((v) => {
+        if (seenIds.has(v.id)) return false;
+        seenIds.add(v.id);
+        return true;
+      });
+
+      setFolderPaths(folderPaths);
+      setMetas(metas);
+      setVideos(allVideos);
+      setBrowserFiles(allFilesRef.current.length > 0 ? allFilesRef.current : undefined);
 
       try {
-        if ((window as any).electronAPI?.setStoredFolderPath) {
-          await (window as any).electronAPI.setStoredFolderPath(path);
+        if ((window as any).electronAPI?.setStoredFolderPaths) {
+          await (window as any).electronAPI.setStoredFolderPaths(folderPaths);
         } else {
-          localStorage.setItem('vault-folder-path', path);
+          localStorage.setItem('vault-folder-paths', JSON.stringify(folderPaths));
         }
       } catch (e) {
-        console.error('Failed to save folder path:', e);
+        console.error('Failed to save folder paths:', e);
       }
+
       setCurrentScreen('gallery');
-      onNotify(`Found ${allVideos.length} media files`, 'success');
+      onNotify(
+        failed
+          ? `Loaded ${allVideos.length} media files from ${folderPaths.length} folder${folderPaths.length !== 1 ? 's' : ''} (${failed} skipped)`
+          : `Found ${allVideos.length} media files in ${folderPaths.length} folder${folderPaths.length !== 1 ? 's' : ''}`,
+        'success'
+      );
       navigate('/app/gallery');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to read folder';
+      const message = error instanceof Error ? error.message : 'Failed to read folders';
       setLocalError(message);
       setAppError(message);
       onNotify(message, 'error');
     } finally {
       setLoading(false);
     }
-  }, [setAppFolderPath, setMetaFile, setVideos, setHasEncryptedContent, setBrowserFiles, setCurrentScreen, setAppError, onNotify, navigate]);
+  }, [selected, scanFolder, onNotify, setAppError, setCurrentScreen, setFolderPaths, setMetas, setVideos, setBrowserFiles, navigate]);
 
   const handleFolderSelect = async () => {
-    if ((window as any).electronAPI?.selectFolder) {
+    if ((window as any).electronAPI?.selectFolders) {
       try {
-        const result = await (window as any).electronAPI.selectFolder();
-        if (result) {
-          setFolderPath(result);
-          setLocalError('');
-          await processFolder(result);
+        const result = await (window as any).electronAPI.selectFolders();
+        if (result && result.length > 0) {
+          addFolders(result);
+          onNotify(`Added ${result.length} folder${result.length !== 1 ? 's' : ''}`, 'success');
         }
       } catch (error) {
-        const message = 'Failed to select folder';
-        setLocalError(message);
-        onNotify(message, 'error');
+        onNotify('Failed to select folders', 'error');
       }
     } else {
       fileInputRef.current?.click();
     }
   };
 
-  const handleBrowserFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBrowserFolderSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.currentTarget.files;
-    if (files && files.length > 0) {
-      const filePath = files[0].webkitRelativePath || '';
-      const folderPath = filePath.split('/')[0];
-      if (folderPath) {
-        const displayPath = folderPath;
-        setFolderPath(displayPath);
-        setLocalError('');
-        onNotify(`Selected ${displayPath}`, 'success');
-        await processFolder(displayPath, files);
-      }
+    if (!files || files.length === 0) return;
+
+    const byFolder = new Map<string, File[]>();
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const relPath = file.webkitRelativePath || file.name;
+      const folderName = relPath.split('/')[0];
+      if (!folderName) continue;
+      const list = byFolder.get(folderName) || [];
+      list.push(file);
+      byFolder.set(folderName, list);
     }
-  };
+
+    const newFolders: SelectedFolder[] = [];
+    byFolder.forEach((folderFiles, folderName) => {
+      newFolders.push({ path: folderName, files: folderFiles });
+      allFilesRef.current = allFilesRef.current.concat(folderFiles);
+    });
+
+    setSelected((prev) => {
+      const existing = new Set(prev.map((s) => s.path.toLowerCase()));
+      const next = [...prev];
+      for (const folder of newFolders) {
+        if (!existing.has(folder.path.toLowerCase())) {
+          existing.add(folder.path.toLowerCase());
+          next.push(folder);
+        }
+      }
+      return next;
+    });
+
+    onNotify(`Added ${newFolders.length} folder${newFolders.length !== 1 ? 's' : ''}`, 'success');
+    e.currentTarget.value = '';
+  }, [onNotify]);
+
+  const handleRemove = useCallback((index: number) => {
+    setSelected((prev) => {
+      const removed = prev[index];
+      if (!removed) return prev;
+      const removedFiles = new Set(removed.files.map((f) => f.webkitRelativePath || f.name));
+      allFilesRef.current = allFilesRef.current.filter((f) => !removedFiles.has(f.webkitRelativePath || f.name));
+      return prev.filter((_, i) => i !== index);
+    });
+  }, []);
 
   return (
     <div className="login-page">
@@ -126,59 +227,91 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPath, on
               <span>Z</span>ee<span>V</span>ault
             </h1>
           </div>
-          <p>Open your media folder to get started</p>
+          <p>Add one or more media folders to get started</p>
         </div>
 
         <div className="vault-form">
-          <div className="field-group">
-            <label>Folder Path</label>
-            <div className="folder-row">
-              <input
-                type="text"
-                value={folderPath}
-                onChange={(e) => setFolderPath(e.target.value)}
-                placeholder="Select or enter folder path"
-                readOnly
-              />
-              <button type="button" onClick={handleFolderSelect} disabled={loading}>
-                {loading ? '...' : 'Browse'}
-              </button>
+          {(selected.length > 0 || savedFolderPaths?.length) && (
+            <div className="field-group">
+              <label>Selected Folders ({selected.length})</label>
+              <div className="folder-list">
+                {selected.map((folder, index) => (
+                  <div key={`${folder.path}-${index}`} className="folder-chip" title={folder.path}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="16" height="16">
+                      <path d="M3 7.5A2.5 2.5 0 015.5 5H10l2 2h6.5A2.5 2.5 0 0121 9.5v7A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5v-9z" />
+                    </svg>
+                    <span className="folder-chip-name">{folderDisplayName(folder.path)}</span>
+                    <button
+                      type="button"
+                      className="folder-chip-remove"
+                      onClick={() => handleRemove(index)}
+                      title="Remove folder"
+                      disabled={loading}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="14" height="14">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
+          )}
+
+          <div className="field-group">
+            <button type="button" className="add-folder-btn" onClick={handleFolderSelect} disabled={loading}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="16" height="16">
+                <path d="M12 8v8M8 12h8" />
+                <path d="M3 7.5A2.5 2.5 0 015.5 5H10l2 2h6.5A2.5 2.5 0 0121 9.5v7A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5v-9z" />
+              </svg>
+              {selected.length === 0 ? 'Select a folder' : 'Add another folder'}
+            </button>
             <input
               ref={fileInputRef}
               type="file"
               webkitdirectory="true"
+              multiple={true}
               onChange={handleBrowserFolderSelect}
               style={{ display: 'none' }}
             />
           </div>
 
-          {savedFolderPath && (
+          {savedFolderPaths && savedFolderPaths.length > 0 && (
             <button
               type="button"
               className="link-btn"
               onClick={() => {
-                setFolderPath('');
-                onClearSavedFolder?.();
+                allFilesRef.current = [];
+                setSelected([]);
+                onClearSavedFolders?.();
               }}
-              style={{ marginTop: '-14px' }}
             >
-              Clear saved folder
+              Clear saved folders
             </button>
           )}
 
           {localError && <div className="form-error">{localError}</div>}
 
-          {loading && (
-            <div className="button-loader" style={{ justifyContent: 'center', padding: '12px 0' }}>
-              <span />
-              <span style={{ color: 'var(--muted)', fontSize: '14px' }}>Scanning folder...</span>
-            </div>
-          )}
+          <div className="field-group">
+            <button
+              type="button"
+              className="primary-button continue-btn"
+              onClick={handleContinue}
+              disabled={selected.length === 0 || loading}
+            >
+              {loading ? 'Scanning folders...' : `Continue with ${selected.length} folder${selected.length !== 1 ? 's' : ''}`}
+            </button>
+            {loading && (
+              <div className="button-loader" style={{ justifyContent: 'center', padding: '6px 0' }}>
+                <span />
+              </div>
+            )}
+          </div>
         </div>
 
         <p className="login-note">
-          Select a folder with videos, images, or encrypted media. Encrypted files will require a password to view.
+          Select one or more folders with videos, images, or encrypted media. Encrypted folders are unlocked per-folder with
+          its password when you play content.
         </p>
       </div>
     </div>

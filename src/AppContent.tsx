@@ -12,101 +12,62 @@ import SubtitleSearchDialog from './components/SubtitleSearchDialog';
 import PasswordPrompt from './components/PasswordPrompt';
 import CustomScrollbar from './components/CustomScrollbar';
 import { DecryptJob, NotificationItem, ThemeMode, VideoItem } from './types/index';
-import { MediaScanner } from './services/mediaScanner';
 import { CryptoService } from './services/cryptoService';
 import { createMseBlob } from './services/tsTransmuxer';
 import { decryptAllThumbnails, generateUnencryptedThumbnailFromBuffer } from './services/thumbnailManager';
 
 const MAX_READY_CACHE = 20;
 
+const folderDisplayName = (path: string): string => {
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  return parts[parts.length - 1] || path;
+};
+
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { encryptedName: routeVideoName } = useParams<{ encryptedName: string }>();
+  const { videoId } = useParams<{ videoId: string }>();
   const {
-    currentScreen, password, browserFiles, isLocked, videos, hasEncryptedContent,
-    setLocked, setCurrentScreen, setPassword, setVideos, setThumbnailsReady,
-    setHasEncryptedContent,
+    currentScreen, browserFiles, isLocked, videos, folderPaths, metas, passwords,
+    setLocked, setCurrentScreen, setPasswordForFolder,
+    setVideos, setThumbnailsReady,
   } = useAppStore();
   const { currentVideo, videoUrl, miniPlayer, setCurrentVideo, setIsDecrypting, setDecryptProgress, setVideoUrl } = usePlayerStore();
   const [theme, setTheme] = useState<ThemeMode>('dark');
-  const [savedFolderPath, setSavedFolderPath] = useState<string | null>(null);
+  const [savedFolderPaths, setSavedFolderPaths] = useState<string[] | null>(null);
 
   useEffect(() => {
     // Browser mode: always show login, no persistent storage
     if (!(window as any).electronAPI) {
-      setSavedFolderPath('');
+      let fallback: string[] = [];
+      try {
+        const stored = localStorage.getItem('vault-folder-paths');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) fallback = parsed.filter(Boolean);
+        } else {
+          const legacy = localStorage.getItem('vault-folder-path');
+          if (legacy) fallback = [legacy];
+        }
+      } catch {}
+      setSavedFolderPaths(fallback);
       return;
     }
 
     let cancelled = false;
     (async () => {
-      let p: string | null = null;
+      let paths: string[] = [];
       try {
-        p = await (window as any).electronAPI.getStoredFolderPath();
-        if (!p) {
-          try { p = localStorage.getItem('vault-folder-path'); } catch {}
+        if ((window as any).electronAPI?.getStoredFolderPaths) {
+          paths = await (window as any).electronAPI.getStoredFolderPaths();
+        }
+        if ((!paths || paths.length === 0) && (window as any).electronAPI?.getStoredFolderPath) {
+          const legacy = await (window as any).electronAPI.getStoredFolderPath();
+          if (legacy) paths = [legacy];
         }
       } catch {}
 
-      if (p) {
-        try {
-          let pathValid = false;
-          try { pathValid = await (window as any).electronAPI.checkPath(p); } catch {}
-
-          if (!pathValid) {
-            try {
-              if ((window as any).electronAPI?.setStoredFolderPath) {
-                await (window as any).electronAPI.setStoredFolderPath('');
-              }
-              localStorage.removeItem('vault-folder-path');
-            } catch {}
-            setSavedFolderPath('');
-            return;
-          }
-
-          const metaContent = await MediaScanner.readMetaContent(p);
-          let encryptedVideos: any[] = [];
-          let metaFile = null;
-          let hasEncrypted = false;
-
-          if (metaContent) {
-            metaFile = MediaScanner.parseMeta(metaContent);
-            if (MediaScanner.isValidMetaFile(metaFile)) {
-              hasEncrypted = true;
-              encryptedVideos = MediaScanner.metaToEncryptedVideos(metaFile, p);
-            }
-          }
-
-          const scannedFiles = await MediaScanner.scanFolderFiles(p);
-          const unencryptedVideos = MediaScanner.scannedToUnencryptedVideos(scannedFiles, p);
-          const allVideos = MediaScanner.mergeMedia(encryptedVideos, unencryptedVideos);
-
-          if (!cancelled) {
-            useAppStore.setState({
-              folderPath: p,
-              metaFile,
-              videos: allVideos,
-              hasEncryptedContent: hasEncrypted,
-              currentScreen: 'gallery',
-            });
-          }
-
-          if ((window as any).electronAPI?.setStoredFolderPath) {
-            await (window as any).electronAPI.setStoredFolderPath(p);
-          } else {
-            localStorage.setItem('vault-folder-path', p);
-          }
-
-          if (!cancelled) {
-            navigate('/app/gallery', { replace: true });
-            setSavedFolderPath('');
-          }
-          return;
-        } catch {}
-      }
-
-      if (!cancelled) setSavedFolderPath(p ?? '');
+      if (!cancelled) setSavedFolderPaths(paths ?? []);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -131,8 +92,7 @@ const AppContent: React.FC = () => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [passwordPromptVisible, setPasswordPromptVisible] = useState(false);
   const [pendingDecryptVideo, setPendingDecryptVideo] = useState<VideoItem | null>(null);
-  const [galleryPasswordPromptVisible, setGalleryPasswordPromptVisible] = useState(false);
-  const [galleryPasswordDismissed, setGalleryPasswordDismissed] = useState(false);
+  const [pendingUnlockFolder, setPendingUnlockFolder] = useState<string | null>(null);
   const decryptJobsRef = useRef(decryptJobs);
   const readyOrderRef = useRef<string[]>([]);
   const unencryptedThumbsGeneratedRef = useRef(false);
@@ -167,9 +127,10 @@ const AppContent: React.FC = () => {
         throw new Error('No browser file source is available');
       }
 
-      const targetFile = Array.from(browserFiles).find((file) => {
+      const targetFile = browserFiles.find((file) => {
         const relativePath = file.webkitRelativePath || file.name;
-        return relativePath.endsWith(video.encryptedName);
+        const normalized = relativePath.replace(/\\/g, '/');
+        return normalized === video.filePath.replace(/\\/g, '/') || normalized.endsWith(video.encryptedName);
       });
 
       if (!targetFile) {
@@ -193,17 +154,17 @@ const AppContent: React.FC = () => {
   );
 
   const rememberReadyVideo = useCallback(
-    (jobs: Record<string, DecryptJob>, videoName: string, readyJob: DecryptJob) => {
+    (jobs: Record<string, DecryptJob>, videoId: string, readyJob: DecryptJob) => {
       const nextJobs = { ...jobs };
-      const previous = nextJobs[videoName];
+      const previous = nextJobs[videoId];
       if (previous?.url && previous.url !== readyJob.url) {
         if (previous._cleanup) previous._cleanup();
         else URL.revokeObjectURL(previous.url);
       }
 
-      nextJobs[videoName] = readyJob;
-      readyOrderRef.current = readyOrderRef.current.filter((name) => name !== videoName);
-      readyOrderRef.current.push(videoName);
+      nextJobs[videoId] = readyJob;
+      readyOrderRef.current = readyOrderRef.current.filter((name) => name !== videoId);
+      readyOrderRef.current.push(videoId);
 
       while (readyOrderRef.current.length > MAX_READY_CACHE) {
         const oldestName = readyOrderRef.current.shift();
@@ -223,19 +184,19 @@ const AppContent: React.FC = () => {
   const clearVideoCache = useCallback(
     (video: VideoItem, silent = false) => {
       updateDecryptJobs((jobs) => {
-        const job = jobs[video.encryptedName];
+        const job = jobs[video.id];
         if (job?.url) {
           if (job._cleanup) job._cleanup();
           else URL.revokeObjectURL(job.url);
         }
-        readyOrderRef.current = readyOrderRef.current.filter((name) => name !== video.encryptedName);
+        readyOrderRef.current = readyOrderRef.current.filter((name) => name !== video.id);
         const nextJobs = { ...jobs };
-        delete nextJobs[video.encryptedName];
+        delete nextJobs[video.id];
         return nextJobs;
       });
 
       const playerState = usePlayerStore.getState();
-      if (playerState.currentVideo?.encryptedName === video.encryptedName) {
+      if (playerState.currentVideo?.id === video.id) {
         setVideoUrl(null);
       }
 
@@ -244,17 +205,18 @@ const AppContent: React.FC = () => {
   );
 
   const decryptSingleVideo = useCallback(async (video: VideoItem) => {
-    const existing = decryptJobsRef.current[video.encryptedName];
+    const existing = decryptJobsRef.current[video.id];
     if (existing?.status === 'decrypting') return;
     if (existing?.status === 'ready') {
       notify('This media is already decrypted.', 'info');
       return;
     }
 
-    const currentPassword = useAppStore.getState().password;
+    const pwd = useAppStore.getState().passwords[video.folderPath] || null;
 
-    if (video.encrypted && !currentPassword) {
+    if (video.encrypted && !pwd) {
       setPendingDecryptVideo(video);
+      setPendingUnlockFolder(null);
       setPasswordPromptVisible(true);
       return;
     }
@@ -264,7 +226,7 @@ const AppContent: React.FC = () => {
     setDecryptProgress(0);
     updateDecryptJobs((jobs) => ({
       ...jobs,
-      [video.encryptedName]: { status: 'decrypting', progress: 0 },
+      [video.id]: { status: 'decrypting', progress: 0 },
     }));
     notify(`Processing ${video.originalName}`, 'info');
 
@@ -278,11 +240,11 @@ const AppContent: React.FC = () => {
           (done, total) => {
             const progress = Math.max(1, Math.round((done / total) * 100));
             setDecryptProgress(progress);
-            updateDecryptJobs((jobs) => ({ ...jobs, [video.encryptedName]: { status: 'decrypting', progress } }));
+            updateDecryptJobs((jobs) => ({ ...jobs, [video.id]: { status: 'decrypting', progress } }));
           }
         );
         updateDecryptJobs((jobs) =>
-          rememberReadyVideo(jobs, video.encryptedName, { status: 'ready', progress: 100, url })
+          rememberReadyVideo(jobs, video.id, { status: 'ready', progress: 100, url })
         );
         setIsDecrypting(false);
         setDecryptProgress(100);
@@ -291,7 +253,7 @@ const AppContent: React.FC = () => {
         if (video.mediaType === 'unencrypted_video') {
           setVideoUrl(url);
           useAppStore.setState({ currentScreen: 'player' });
-          navigate(`/app/view/${encodeURIComponent(video.encryptedName)}`);
+          navigate(`/app/view/${encodeURIComponent(video.id)}`);
         }
         return;
       }
@@ -307,14 +269,14 @@ const AppContent: React.FC = () => {
         const decryptedChunks: Uint8Array[] = [];
         const chunkSize = 4 * 1024 * 1024;
 
-        for (const chunk of CryptoService.xorDecryptChunked(fileBytes, currentPassword!, chunkSize)) {
+        for (const chunk of CryptoService.xorDecryptChunked(fileBytes, pwd!, chunkSize)) {
           decryptedChunks.push(chunk);
           processedSize += chunk.length;
           const progress = Math.max(1, Math.round((processedSize / totalSize) * 100));
           setDecryptProgress(progress);
           updateDecryptJobs((jobs) => ({
             ...jobs,
-            [video.encryptedName]: { status: 'decrypting', progress },
+            [video.id]: { status: 'decrypting', progress },
           }));
           await new Promise((resolve) => window.setTimeout(resolve, 0));
         }
@@ -330,13 +292,13 @@ const AppContent: React.FC = () => {
           try {
             const { url, cleanup } = await createMseBlob(decryptedBuffer);
             updateDecryptJobs((jobs) =>
-              rememberReadyVideo(jobs, video.encryptedName, { status: 'ready', progress: 100, url, _cleanup: cleanup })
+              rememberReadyVideo(jobs, video.id, { status: 'ready', progress: 100, url, _cleanup: cleanup })
             );
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             updateDecryptJobs((jobs) => ({
               ...jobs,
-              [video.encryptedName]: { status: 'error', progress: 0, error: msg },
+              [video.id]: { status: 'error', progress: 0, error: msg },
             }));
             setIsDecrypting(false);
             setDecryptProgress(0);
@@ -347,22 +309,22 @@ const AppContent: React.FC = () => {
           const mimeType = isImage ? `image/${video.extension}` : CryptoService.getMimeType(video.originalName);
           const url = CryptoService.bufferToBlob(decryptedBuffer, mimeType);
           updateDecryptJobs((jobs) =>
-            rememberReadyVideo(jobs, video.encryptedName, { status: 'ready', progress: 100, url })
+            rememberReadyVideo(jobs, video.id, { status: 'ready', progress: 100, url })
           );
         }
       } else {
         // Large encrypted video: stream-decrypt directly into a blob URL.
         const mimeType = CryptoService.getMimeType(video.originalName);
         const { url, cleanup } = await CryptoService.streamToBlobUrl(
-          video.filePath, currentPassword!, mimeType, readVideoFileChunk,
+          video.filePath, pwd!, mimeType, readVideoFileChunk,
           (done, total) => {
             const progress = Math.max(1, Math.round((done / total) * 100));
             setDecryptProgress(progress);
-            updateDecryptJobs((jobs) => ({ ...jobs, [video.encryptedName]: { status: 'decrypting', progress } }));
+            updateDecryptJobs((jobs) => ({ ...jobs, [video.id]: { status: 'decrypting', progress } }));
           }
         );
         updateDecryptJobs((jobs) =>
-          rememberReadyVideo(jobs, video.encryptedName, { status: 'ready', progress: 100, url, _cleanup: cleanup })
+          rememberReadyVideo(jobs, video.id, { status: 'ready', progress: 100, url, _cleanup: cleanup })
         );
       }
 
@@ -375,14 +337,14 @@ const AppContent: React.FC = () => {
         const allImages = state.videos.filter(v =>
           v.mediaType === 'encrypted_image' || v.mediaType === 'unencrypted_image'
         );
-        const idx = allImages.findIndex(v => v.encryptedName === video.encryptedName);
+        const idx = allImages.findIndex(v => v.id === video.id);
         useAppStore.getState().setImageViewer({ items: allImages, currentIndex: Math.max(0, idx), visible: true });
       } else {
-        const url = decryptJobsRef.current[video.encryptedName]?.url;
+        const url = decryptJobsRef.current[video.id]?.url;
         if (url) {
           setVideoUrl(url);
           useAppStore.setState({ currentScreen: 'player' });
-          navigate(`/app/view/${encodeURIComponent(video.encryptedName)}`);
+          navigate(`/app/view/${encodeURIComponent(video.id)}`);
         }
       }
 
@@ -392,79 +354,64 @@ const AppContent: React.FC = () => {
       setDecryptProgress(0);
       updateDecryptJobs((jobs) => ({
         ...jobs,
-        [video.encryptedName]: { status: 'error', progress: 0, error: message },
+        [video.id]: { status: 'error', progress: 0, error: message },
       }));
       notify(message, 'error');
     }
-  }, [notify, password, readVideoFile, rememberReadyVideo, setCurrentVideo, setDecryptProgress, setIsDecrypting, updateDecryptJobs, setVideoUrl, navigate]);
+  }, [notify, readVideoFile, rememberReadyVideo, setCurrentVideo, setDecryptProgress, setIsDecrypting, updateDecryptJobs, setVideoUrl, navigate]);
 
-  const handleGalleryPasswordSubmit = useCallback(async (pwd: string | null) => {
-    setGalleryPasswordPromptVisible(false);
+  const handleUnlockFolder = useCallback((folderPath: string) => {
+    setPendingUnlockFolder(folderPath);
+    setPendingDecryptVideo(null);
+    setPasswordPromptVisible(true);
+  }, []);
 
-    if (pwd) {
-      const metaFile = useAppStore.getState().metaFile;
-      if (metaFile && !CryptoService.verifyPassword(pwd, metaFile.password_hash)) {
-        notify('Invalid password', 'error');
-        return;
-      }
-      setPassword(pwd);
-      setHasEncryptedContent(true);
-
-      const currentVideos = useAppStore.getState().videos;
-      const updated = await decryptAllThumbnails(currentVideos, pwd);
-      setVideos(updated);
-      setThumbnailsReady(true);
-      notify('Password accepted. Thumbnails unlocked.', 'success');
-    } else {
-      setGalleryPasswordDismissed(true);
-      notify('You can enter the password later to unlock encrypted content.', 'info');
-    }
-  }, [setPassword, setHasEncryptedContent, setVideos, setThumbnailsReady, notify]);
-
-  useEffect(() => {
-    if (currentScreen === 'gallery' && hasEncryptedContent && !password && !galleryPasswordPromptVisible && !galleryPasswordDismissed) {
-      setGalleryPasswordPromptVisible(true);
-    }
-  }, [currentScreen, hasEncryptedContent, password, galleryPasswordPromptVisible, galleryPasswordDismissed]);
-
-  const handlePasswordForDecrypt = useCallback(async (pwd: string | null) => {
+  const handlePasswordSubmit = useCallback(async (pwd: string | null) => {
+    const decryptVideo = pendingDecryptVideo;
+    const unlockFolder = decryptVideo?.folderPath ?? pendingUnlockFolder;
     setPasswordPromptVisible(false);
-    if (pwd && pendingDecryptVideo) {
-      const metaFile = useAppStore.getState().metaFile;
-      if (metaFile && !CryptoService.verifyPassword(pwd, metaFile.password_hash)) {
+
+    if (pwd && unlockFolder) {
+      const meta = useAppStore.getState().metas[unlockFolder];
+      if (meta && !CryptoService.verifyPassword(pwd, meta.password_hash)) {
         notify('Invalid password', 'error');
-        setPendingDecryptVideo(null);
+        setPasswordPromptVisible(true);
         return;
       }
-      setPassword(pwd);
-      setHasEncryptedContent(true);
+      setPasswordForFolder(unlockFolder, pwd);
 
       const currentVideos = useAppStore.getState().videos;
-      const updated = await decryptAllThumbnails(currentVideos, pwd);
+      const updated = await decryptAllThumbnails(currentVideos, pwd, unlockFolder);
       setVideos(updated);
       setThumbnailsReady(true);
+      notify(`Unlocked: ${folderDisplayName(unlockFolder)}`, 'success');
 
-      setPendingDecryptVideo(null);
-      const videoToDecrypt = pendingDecryptVideo;
-      setTimeout(() => decryptSingleVideo(videoToDecrypt), 100);
-    } else {
-      setPendingDecryptVideo(null);
-      notify('Password required to decrypt encrypted content', 'info');
+      if (decryptVideo) {
+        setPendingDecryptVideo(null);
+        setPendingUnlockFolder(null);
+        setTimeout(() => decryptSingleVideo(decryptVideo), 100);
+        return;
+      }
+    } else if (!pwd) {
+      notify('Password required to access encrypted content', 'info');
     }
-  }, [pendingDecryptVideo, setPassword, setHasEncryptedContent, setVideos, setThumbnailsReady, notify, decryptSingleVideo]);
+
+    setPendingDecryptVideo(null);
+    setPendingUnlockFolder(null);
+  }, [pendingDecryptVideo, pendingUnlockFolder, setPasswordForFolder, setVideos, setThumbnailsReady, notify, decryptSingleVideo]);
 
   const handleVideoDecrypt = useCallback((video: VideoItem) => {
     void decryptSingleVideo(video);
   }, [decryptSingleVideo]);
 
   const playUnencryptedVideo = useCallback(async (video: VideoItem) => {
-    const existing = decryptJobsRef.current[video.encryptedName];
+    const existing = decryptJobsRef.current[video.id];
     if (existing?.url) {
       setCurrentVideo(video);
       setVideoUrl(existing.url);
       setIsDecrypting(false);
       useAppStore.setState({ currentScreen: 'player' });
-      navigate(`/app/view/${encodeURIComponent(video.encryptedName)}`);
+      navigate(`/app/view/${encodeURIComponent(video.id)}`);
       return;
     }
 
@@ -480,13 +427,13 @@ const AppContent: React.FC = () => {
       );
 
       updateDecryptJobs((jobs) =>
-        rememberReadyVideo(jobs, video.encryptedName, { status: 'ready', progress: 100, url })
+        rememberReadyVideo(jobs, video.id, { status: 'ready', progress: 100, url })
       );
       setCurrentVideo(video);
       setVideoUrl(url);
       setIsDecrypting(false);
       useAppStore.setState({ currentScreen: 'player' });
-      navigate(`/app/view/${encodeURIComponent(video.encryptedName)}`);
+      navigate(`/app/view/${encodeURIComponent(video.id)}`);
     } catch (error) {
       setIsDecrypting(false);
       notify(`Failed to play: ${video.originalName}`, 'error');
@@ -499,23 +446,24 @@ const AppContent: React.FC = () => {
       return;
     }
 
-    const job = decryptJobs[video.encryptedName];
+    // Encrypted content is only playable after it has been decrypted once.
+    const job = decryptJobs[video.id];
     if (!job?.url) {
-      notify('Decrypt this video first, then press Play.', 'info');
+      void decryptSingleVideo(video);
       return;
     }
     setCurrentVideo(video);
     setVideoUrl(job.url);
     setIsDecrypting(false);
     useAppStore.setState({ currentScreen: 'player' });
-    navigate(`/app/view/${encodeURIComponent(video.encryptedName)}`);
-  }, [decryptJobs, notify, setCurrentVideo, setIsDecrypting, setVideoUrl, navigate, playUnencryptedVideo]);
+    navigate(`/app/view/${encodeURIComponent(video.id)}`);
+  }, [decryptJobs, decryptSingleVideo, playUnencryptedVideo, setCurrentVideo, setIsDecrypting, setVideoUrl, navigate]);
 
   const handleViewImage = useCallback((video: VideoItem) => {
     const allImages = videos.filter(v =>
       v.mediaType === 'encrypted_image' || v.mediaType === 'unencrypted_image'
     );
-    const idx = allImages.findIndex(v => v.encryptedName === video.encryptedName);
+    const idx = allImages.findIndex(v => v.id === video.id);
     useAppStore.getState().setImageViewer({ items: allImages, currentIndex: Math.max(0, idx), visible: true });
   }, [videos]);
 
@@ -585,11 +533,11 @@ const AppContent: React.FC = () => {
           const fileData = await readVideoFile(video);
           const bytes = fileData instanceof Uint8Array ? fileData : new Uint8Array(fileData);
           const url = await generateUnencryptedThumbnailFromBuffer(bytes, video.originalName);
-          if (url) patch[video.encryptedName] = url;
+          if (url) patch[video.id] = url;
         } catch {}
       }
       const current = useAppStore.getState().videos;
-      const updated = current.map(v => patch[v.encryptedName] ? { ...v, thumbnailUrl: patch[v.encryptedName] } : v);
+      const updated = current.map(v => patch[v.id] ? { ...v, thumbnailUrl: patch[v.id] } : v);
       setVideos(updated);
     })();
   }, [currentScreen, videos, readVideoFile, setVideos]);
@@ -605,10 +553,10 @@ const AppContent: React.FC = () => {
   }, [location.pathname]);
 
   useEffect(() => {
-    if (routeVideoName) {
-      const video = useAppStore.getState().videos.find(v => v.encryptedName === routeVideoName);
+    if (videoId) {
+      const video = useAppStore.getState().videos.find(v => v.id === videoId || v.encryptedName === videoId);
       if (video) {
-        const job = decryptJobs[video.encryptedName];
+        const job = decryptJobs[video.id];
         if (job?.url) {
           setCurrentVideo(video);
           setVideoUrl(job.url);
@@ -617,7 +565,7 @@ const AppContent: React.FC = () => {
         }
       }
     }
-  }, [routeVideoName]);
+  }, [videoId]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -633,6 +581,16 @@ const AppContent: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentScreen, isLocked, setLocked]);
 
+  const passwordDescription = useMemo(() => {
+    if (pendingDecryptVideo) {
+      return `Enter the vault password for "${folderDisplayName(pendingDecryptVideo.folderPath)}" to decrypt "${pendingDecryptVideo.originalName}".`;
+    }
+    if (pendingUnlockFolder) {
+      return `Enter the vault password to unlock "${folderDisplayName(pendingUnlockFolder)}".`;
+    }
+    return 'Enter the vault password to access encrypted content.';
+  }, [pendingDecryptVideo, pendingUnlockFolder]);
+
   return (
     <div className={`app-shell theme-${theme}`}>
       <CustomScrollbar />
@@ -641,22 +599,23 @@ const AppContent: React.FC = () => {
       <div className="ambient-shape shape-three" />
       <NotificationStack notifications={notifications} />
       {isLocked && <LockScreen />}
-      {currentScreen === 'login' && savedFolderPath === null && (
+      {currentScreen === 'login' && savedFolderPaths === null && (
         <div className="loading-screen"><div className="loading-spinner" /></div>
       )}
-      {currentScreen === 'login' && savedFolderPath !== null && (
+      {currentScreen === 'login' && savedFolderPaths !== null && (
         <LoginScreen
           onNotify={notify}
-          savedFolderPath={savedFolderPath}
-          onClearSavedFolder={async () => {
-            setSavedFolderPath('');
+          savedFolderPaths={savedFolderPaths}
+          onClearSavedFolders={async () => {
+            setSavedFolderPaths([]);
             try {
-              if ((window as any).electronAPI?.setStoredFolderPath) {
-                await (window as any).electronAPI.setStoredFolderPath('');
+              if ((window as any).electronAPI?.setStoredFolderPaths) {
+                await (window as any).electronAPI.setStoredFolderPaths([]);
               }
+              localStorage.removeItem('vault-folder-paths');
               localStorage.removeItem('vault-folder-path');
             } catch (e) {
-              console.error('Failed to clear saved folder path:', e);
+              console.error('Failed to clear saved folder paths:', e);
             }
           }}
         />
@@ -666,6 +625,10 @@ const AppContent: React.FC = () => {
           decryptJobs={decryptJobs}
           collectiveProgress={collectiveProgress}
           theme={theme}
+          folderPaths={folderPaths}
+          metas={metas}
+          passwords={passwords}
+          onUnlockFolder={handleUnlockFolder}
           onThemeToggle={toggleTheme}
           onVideoDecrypt={handleVideoDecrypt}
           onVideoPlay={handleVideoPlay}
@@ -681,14 +644,8 @@ const AppContent: React.FC = () => {
       <PasswordPrompt
         visible={passwordPromptVisible}
         title="Password Required"
-        description="Enter the vault password to decrypt this content."
-        onSubmit={handlePasswordForDecrypt}
-      />
-      <PasswordPrompt
-        visible={galleryPasswordPromptVisible}
-        title="Encrypted Content Found"
-        description="This folder contains encrypted media. Enter the vault password to unlock thumbnails and playback, or skip to browse unencrypted files only."
-        onSubmit={handleGalleryPasswordSubmit}
+        description={passwordDescription}
+        onSubmit={handlePasswordSubmit}
       />
       {reloadPending && (
         <div className="reload-overlay" onClick={handleReloadCancel}>

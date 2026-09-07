@@ -1,17 +1,17 @@
 import { create } from 'zustand';
-import { AppState } from '../types/index';
+import { AppState, MetaFile } from '../types/index';
 
 export const useAppStore = create<AppState & {
   setCurrentScreen: (screen: AppState['currentScreen']) => void;
-  setFolderPath: (path: string) => void;
-  setPassword: (pwd: string | null) => void;
-  setMetaFile: (meta: AppState['metaFile']) => void;
+  setFolderPaths: (paths: string[]) => void;
+  setPasswordForFolder: (folderPath: string, pwd: string | null) => void;
+  setPasswords: (passwords: Record<string, string>) => void;
+  setMetas: (metas: Record<string, MetaFile | null>) => void;
   setVideos: (videos: AppState['videos']) => void;
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  setBrowserFiles: (files?: FileList) => void;
+  setBrowserFiles: (files?: File[]) => void;
   setLocked: (locked: boolean) => void;
-  setHasEncryptedContent: (has: boolean) => void;
   setFilterType: (type: AppState['filterType']) => void;
   setSortField: (field: AppState['sortField']) => void;
   setSortAscending: (asc: boolean) => void;
@@ -20,15 +20,14 @@ export const useAppStore = create<AppState & {
   reset: () => void;
 }>((set) => ({
   currentScreen: 'login',
-  folderPath: '',
-  password: null,
-  metaFile: null,
+  folderPaths: [],
+  passwords: {},
+  metas: {},
   videos: [],
   isLoading: false,
   error: null,
   browserFiles: undefined,
   isLocked: false,
-  hasEncryptedContent: false,
   filterType: 'all',
   sortField: 'name',
   sortAscending: true,
@@ -36,15 +35,21 @@ export const useAppStore = create<AppState & {
   imageViewer: { items: [], currentIndex: 0, visible: false },
 
   setCurrentScreen: (screen) => set({ currentScreen: screen }),
-  setFolderPath: (path) => set({ folderPath: path }),
-  setPassword: (pwd) => set({ password: pwd }),
-  setMetaFile: (meta) => set({ metaFile: meta }),
+  setFolderPaths: (paths) => set({ folderPaths: paths }),
+  setPasswordForFolder: (folderPath, pwd) =>
+    set((state) => {
+      const passwords = { ...state.passwords };
+      if (pwd) passwords[folderPath] = pwd;
+      else delete passwords[folderPath];
+      return { passwords };
+    }),
+  setPasswords: (passwords) => set({ passwords }),
+  setMetas: (metas) => set({ metas }),
   setVideos: (videos) => set({ videos }),
   setIsLoading: (loading) => set({ isLoading: loading }),
   setError: (error) => set({ error }),
   setBrowserFiles: (files) => set({ browserFiles: files }),
   setLocked: (locked) => set({ isLocked: locked }),
-  setHasEncryptedContent: (has) => set({ hasEncryptedContent: has }),
   setFilterType: (type) => set({ filterType: type }),
   setSortField: (field) => set({ sortField: field }),
   setSortAscending: (asc) => set({ sortAscending: asc }),
@@ -53,15 +58,14 @@ export const useAppStore = create<AppState & {
   reset: () =>
     set({
       currentScreen: 'login',
-      folderPath: '',
-      password: null,
-      metaFile: null,
+      folderPaths: [],
+      passwords: {},
+      metas: {},
       videos: [],
       isLoading: false,
       error: null,
       browserFiles: undefined,
       isLocked: false,
-      hasEncryptedContent: false,
       filterType: 'all',
       sortField: 'name',
       sortAscending: true,

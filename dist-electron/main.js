@@ -68,6 +68,18 @@ ipcMain.handle('selectFolder', async () => {
         return null;
     return result.filePaths[0];
 });
+ipcMain.handle('selectFolders', async () => {
+    if (!mainWindow)
+        return [];
+    const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory', 'multiSelections'],
+        title: 'Select Folders with Videos',
+        buttonLabel: 'Add Folders',
+    });
+    if (result.canceled)
+        return [];
+    return result.filePaths;
+});
 ipcMain.handle('readMetaFile', async (_event, folderPath) => {
     try {
         const metaPath = path.join(folderPath, 'vault.meta');
@@ -190,6 +202,32 @@ ipcMain.handle('setStoredFolderPath', async (_event, folderPath) => {
     try {
         const configPath = getConfigPath();
         await fs.writeFile(configPath, JSON.stringify({ folderPath }), 'utf-8');
+        return true;
+    }
+    catch {
+        return false;
+    }
+});
+ipcMain.handle('getStoredFolderPaths', async () => {
+    try {
+        const configPath = getConfigPath();
+        const data = await fs.readFile(configPath, 'utf-8');
+        const config = JSON.parse(data);
+        if (Array.isArray(config.folderPaths))
+            return config.folderPaths;
+        if (typeof config.folderPath === 'string' && config.folderPath)
+            return [config.folderPath];
+        return [];
+    }
+    catch {
+        return [];
+    }
+});
+ipcMain.handle('setStoredFolderPaths', async (_event, folderPaths) => {
+    try {
+        const configPath = getConfigPath();
+        const list = Array.isArray(folderPaths) ? folderPaths : [];
+        await fs.writeFile(configPath, JSON.stringify({ folderPaths: list }), 'utf-8');
         return true;
     }
     catch {

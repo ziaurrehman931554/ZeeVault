@@ -25,10 +25,12 @@ export interface MetaVideoEntry {
 }
 
 export interface VideoItem {
+  id: string;
   encryptedName: string;
   originalName: string;
   extension: string;
   filePath: string;
+  folderPath: string;
   duration?: string | number;
   encrypted: boolean;
   mediaType: MediaType;
@@ -61,15 +63,14 @@ export interface NotificationItem {
 
 export interface AppState {
   currentScreen: 'login' | 'gallery' | 'player';
-  folderPath: string;
-  password: string | null;
-  metaFile: MetaFile | null;
+  folderPaths: string[];
+  passwords: Record<string, string>;
+  metas: Record<string, MetaFile | null>;
   videos: VideoItem[];
   isLoading: boolean;
   error: string | null;
-  browserFiles?: FileList;
+  browserFiles?: File[];
   isLocked: boolean;
-  hasEncryptedContent: boolean;
   filterType: FilterType;
   sortField: SortField;
   sortAscending: boolean;

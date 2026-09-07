@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { usePlayerStore } from '../stores/playerStore';
 import VideoCard from './VideoCard';
-import { DecryptJob, FilterType, SortField, ThemeMode, VideoItem } from '../types/index';
+import { DecryptJob, FilterType, MetaFile, SortField, ThemeMode, VideoItem } from '../types/index';
 
 interface VideoGalleryProps {
   decryptJobs: Record<string, DecryptJob>;
@@ -14,6 +14,10 @@ interface VideoGalleryProps {
     percent: number;
   };
   theme: ThemeMode;
+  folderPaths: string[];
+  metas: Record<string, MetaFile | null>;
+  passwords: Record<string, string>;
+  onUnlockFolder: (folderPath: string) => void;
   onThemeToggle: () => void;
   onVideoDecrypt: (video: VideoItem) => void;
   onVideoPlay: (video: VideoItem) => void;
@@ -42,6 +46,10 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
   decryptJobs,
   collectiveProgress,
   theme,
+  folderPaths,
+  metas,
+  passwords,
+  onUnlockFolder,
   onThemeToggle,
   onVideoDecrypt,
   onVideoPlay,
@@ -50,7 +58,7 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
   onViewImage,
 }) => {
   const navigate = useNavigate();
-  const { folderPath, videos, filterType, sortField, sortAscending, setFilterType, setSortField, setSortAscending } = useAppStore();
+  const { videos, filterType, sortField, sortAscending, setFilterType, setSortField, setSortAscending } = useAppStore();
   const [search, setSearch] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -142,29 +150,14 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
       URL.revokeObjectURL(playerStore.miniPlayer.videoUrl);
     }
     playerStore.reset();
-    useAppStore.setState({
-      currentScreen: 'login',
-      folderPath: '',
-      password: null,
-      metaFile: null,
-      videos: [],
-      isLoading: false,
-      error: null,
-      browserFiles: undefined,
-      thumbnailsReady: false,
-      hasEncryptedContent: false,
-    });
+    useAppStore.getState().reset();
     navigate('/app/login');
   };
 
-  const pathParts = folderPath
-    .split(/[\\/]+/)
-    .filter(Boolean)
-    .map((part, index, parts) => {
-      if (index === 0 && /^[A-Za-z]:$/.test(part)) return part.replace(':', '://');
-      if (index === 0 && /^[A-Za-z]:/.test(part)) return part.replace(':\\', '://');
-      return index === parts.length - 1 ? part : part;
-    });
+  const folderDisplayName = (path: string): string => {
+    const parts = path.split(/[\\/]+/).filter(Boolean);
+    return parts[parts.length - 1] || path;
+  };
 
   const videoCount = filteredVideos.filter(v => v.mediaType === 'encrypted_video' || v.mediaType === 'unencrypted_video').length;
   const imageCount = filteredVideos.filter(v => v.mediaType === 'encrypted_image' || v.mediaType === 'unencrypted_image').length;
@@ -228,13 +221,44 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M3 7.5A2.5 2.5 0 015.5 5H10l2 2h6.5A2.5 2.5 0 0121 9.5v7A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5v-9z" />
           </svg>
-          <div className="path-crumbs">
-            {(pathParts.length ? pathParts : [folderPath]).map((part, index) => (
-              <React.Fragment key={`${part}-${index}`}>
-                {index > 0 && <span className="path-separator">&gt;</span>}
-                <span>{part}</span>
-              </React.Fragment>
-            ))}
+          <div className="folder-chips">
+            {folderPaths.length === 0 && <span className="path-crumbs">No folders loaded</span>}
+            {folderPaths.map((folder) => {
+              const hasMeta = Boolean(metas[folder]);
+              const unlocked = Boolean(passwords[folder]);
+              return (
+                <div
+                  key={folder}
+                  className={`folder-chip ${unlocked ? 'is-unlocked' : hasMeta ? 'is-locked' : ''}`}
+                  title={folder}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="14" height="14" aria-hidden="true">
+                    {hasMeta && !unlocked ? (
+                      <>
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0110 0v4" />
+                      </>
+                    ) : (
+                      <path d="M3 7.5A2.5 2.5 0 015.5 5H10l2 2h6.5A2.5 2.5 0 0121 9.5v7A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5v-9z" />
+                    )}
+                  </svg>
+                  <span className="folder-chip-name">{folderDisplayName(folder)}</span>
+                  {hasMeta && !unlocked && (
+                    <button
+                      type="button"
+                      className="folder-chip-unlock"
+                      onClick={() => onUnlockFolder(folder)}
+                      title={`Unlock "${folderDisplayName(folder)}"`}
+                    >
+                      Unlock
+                    </button>
+                  )}
+                  {hasMeta && unlocked && (
+                    <span className="folder-chip-status" title="Folder unlocked for this session">Unlocked</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -294,9 +318,9 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
           <div className="video-grid">
             {filteredVideos.map((video) => (
               <VideoCard
-                key={video.encryptedName}
+                key={video.id}
                 video={video}
-                job={decryptJobs[video.encryptedName]}
+                job={decryptJobs[video.id]}
                 onDecrypt={onVideoDecrypt}
                 onPlay={onVideoPlay}
                 onClear={onVideoClear}

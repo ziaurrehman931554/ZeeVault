@@ -10,6 +10,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
 
+  selectFolders: async () => {
+    try {
+      return await ipcRenderer.invoke('selectFolders');
+    } catch (error) {
+      console.error('Error in selectFolders:', error);
+      return [];
+    }
+  },
+
   readMetaFile: async (folderPath: string) => {
     try {
       return await ipcRenderer.invoke('readMetaFile', folderPath);
@@ -73,6 +82,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setStoredFolderPath: async (folderPath: string) => {
     try {
       return await ipcRenderer.invoke('setStoredFolderPath', folderPath);
+    } catch {
+      return false;
+    }
+  },
+
+  getStoredFolderPaths: async () => {
+    try {
+      return await ipcRenderer.invoke('getStoredFolderPaths');
+    } catch {
+      return [];
+    }
+  },
+
+  setStoredFolderPaths: async (folderPaths: string[]) => {
+    try {
+      return await ipcRenderer.invoke('setStoredFolderPaths', folderPaths);
     } catch {
       return false;
     }

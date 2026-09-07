@@ -62,12 +62,15 @@ export class MediaScanner {
 
       const extension = originalName.split('.').pop() || '';
       const kind = this.classifyExtension(extension) || 'video';
+      const filePath = `${folderPath}\\${encryptedName}`;
 
       videos.push({
+        id: filePath,
         encryptedName,
         originalName,
         extension,
-        filePath: `${folderPath}\\${encryptedName}`,
+        filePath,
+        folderPath,
         duration: typeof entry !== 'string' ? entry.duration : undefined,
         encrypted: true,
         mediaType: kind === 'image' ? 'encrypted_image' : 'encrypted_video',
@@ -93,10 +96,12 @@ export class MediaScanner {
       if (!kind) continue;
 
       videos.push({
+        id: file.path,
         encryptedName: file.name,
         originalName: file.name,
         extension: file.extension,
         filePath: file.path,
+        folderPath,
         encrypted: false,
         mediaType: kind === 'image' ? 'unencrypted_image' : 'unencrypted_video',
         dateAdded: file.dateAdded,
@@ -140,15 +145,18 @@ export class MediaScanner {
     return false;
   }
 
-  static async readMetaContent(folderPath: string, browserFiles?: FileList): Promise<string | null> {
+  static async readMetaContent(folderPath: string, browserFiles?: File[], folderPrefix?: string): Promise<string | null> {
     if ((window as any).electronAPI?.readMetaFile) {
       return (window as any).electronAPI.readMetaFile(folderPath);
     }
 
     if (browserFiles) {
       for (let i = 0; i < browserFiles.length; i++) {
-        if (browserFiles[i].name === 'vault.meta') {
-          return browserFiles[i].text();
+        const file = browserFiles[i];
+        const relPath = file.webkitRelativePath || file.name;
+        if (folderPrefix && !relPath.startsWith(`${folderPrefix}/`)) continue;
+        if (file.name === 'vault.meta') {
+          return file.text();
         }
       }
     }
@@ -156,7 +164,7 @@ export class MediaScanner {
     return null;
   }
 
-  static async scanFolderFiles(folderPath: string, browserFiles?: FileList): Promise<ScannedFile[]> {
+  static async scanFolderFiles(folderPath: string, browserFiles?: File[], folderPrefix?: string): Promise<ScannedFile[]> {
     if ((window as any).electronAPI?.listMediaFiles) {
       return (window as any).electronAPI.listMediaFiles(folderPath);
     }
@@ -168,6 +176,7 @@ export class MediaScanner {
       for (let i = 0; i < browserFiles.length; i++) {
         const file = browserFiles[i];
         const relPath = file.webkitRelativePath || file.name;
+        if (folderPrefix && !relPath.startsWith(`${folderPrefix}/`)) continue;
         const parts = relPath.split('/');
         const fileName = parts[parts.length - 1];
 

@@ -11,6 +11,15 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
             return null;
         }
     },
+    selectFolders: async () => {
+        try {
+            return await electron_1.ipcRenderer.invoke('selectFolders');
+        }
+        catch (error) {
+            console.error('Error in selectFolders:', error);
+            return [];
+        }
+    },
     readMetaFile: async (folderPath) => {
         try {
             return await electron_1.ipcRenderer.invoke('readMetaFile', folderPath);
@@ -74,6 +83,22 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     setStoredFolderPath: async (folderPath) => {
         try {
             return await electron_1.ipcRenderer.invoke('setStoredFolderPath', folderPath);
+        }
+        catch {
+            return false;
+        }
+    },
+    getStoredFolderPaths: async () => {
+        try {
+            return await electron_1.ipcRenderer.invoke('getStoredFolderPaths');
+        }
+        catch {
+            return [];
+        }
+    },
+    setStoredFolderPaths: async (folderPaths) => {
+        try {
+            return await electron_1.ipcRenderer.invoke('setStoredFolderPaths', folderPaths);
         }
         catch {
             return false;

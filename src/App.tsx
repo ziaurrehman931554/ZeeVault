@@ -24,7 +24,7 @@ const App: React.FC = () => {
         <Route path="/home" element={<HomePage />} />
         <Route path="/app/login" element={<AppContent />} />
         <Route path="/app/gallery" element={<AppContent />} />
-        <Route path="/app/view/:encryptedName" element={<AppContent />} />
+        <Route path="/app/view/:videoId" element={<AppContent />} />
         <Route path="/app" element={<Navigate to="/app/login" replace />} />
         <Route path="*" element={<Navigate to={isElectron() ? '/app/login' : '/home'} replace />} />
       </Routes>

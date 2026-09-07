@@ -3,12 +3,14 @@ import { CryptoService } from './cryptoService';
 
 export async function decryptAllThumbnails(
   videos: VideoItem[],
-  password: string
+  password: string,
+  folderPath?: string
 ): Promise<VideoItem[]> {
   const updated = [...videos];
 
   for (let i = 0; i < updated.length; i++) {
     const video = updated[i];
+    if (folderPath && video.folderPath !== folderPath) continue;
     if (video.thumbnailEncrypted && password) {
       const url = CryptoService.decryptThumbnail(video.thumbnailEncrypted, password);
       if (url) {
