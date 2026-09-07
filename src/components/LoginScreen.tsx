@@ -59,6 +59,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPaths, o
     meta: MetaFile | null;
   }> => {
     const isBrowser = files.length > 0;
+    const scannedFiles = await MediaScanner.scanFolderFiles(folderPath, files, isBrowser ? folderPath : undefined);
+
     const metaContent = await MediaScanner.readMetaContent(folderPath, files, folderPath);
     let encryptedVideos: any[] = [];
     let meta: MetaFile | null = null;
@@ -66,13 +68,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPaths, o
     if (metaContent) {
       meta = MediaScanner.parseMeta(metaContent);
       if (MediaScanner.isValidMetaFile(meta)) {
-        encryptedVideos = MediaScanner.metaToEncryptedVideos(meta, folderPath);
+        const encPathByName = new Map<string, string>();
+        for (const f of scannedFiles) {
+          if (f.isEncrypted) encPathByName.set(f.name.toLowerCase(), f.path);
+        }
+        encryptedVideos = MediaScanner.metaToEncryptedVideos(
+          meta,
+          folderPath,
+          (encryptedName) => encPathByName.get(encryptedName.toLowerCase()) ?? `${folderPath}\\${encryptedName}`
+        );
       } else {
         meta = null;
       }
     }
 
-    const scannedFiles = await MediaScanner.scanFolderFiles(folderPath, files, isBrowser ? folderPath : undefined);
     const unencryptedVideos = MediaScanner.scannedToUnencryptedVideos(scannedFiles, folderPath);
     const allVideos = MediaScanner.mergeMedia(encryptedVideos, unencryptedVideos);
 
@@ -231,10 +240,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPaths, o
         </div>
 
         <div className="vault-form">
-          {(selected.length > 0 || savedFolderPaths?.length) && (
-            <div className="field-group">
-              <label>Selected Folders ({selected.length})</label>
-              <div className="folder-list">
+          <div className="field-group">
+            <label>Selected Folders{selected.length > 0 ? ` (${selected.length})` : ''}</label>
+            {selected.length === 0 ? (
+              <p className="folder-empty-hint">Please select at least one folder to continue.</p>
+            ) : (
+              <div className={`folder-list${selected.length > 4 ? ' grid' : ''}`}>
                 {selected.map((folder, index) => (
                   <div key={`${folder.path}-${index}`} className="folder-chip" title={folder.path}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="16" height="16">
@@ -255,8 +266,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPaths, o
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           <div className="field-group">
             <button type="button" className="add-folder-btn" onClick={handleFolderSelect} disabled={loading}>

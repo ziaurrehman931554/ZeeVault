@@ -150,36 +150,47 @@ ipcMain.handle('fileExists', async (_event, filePath) => {
 });
 const SUPPORTED_VIDEO = new Set(['.mp4', '.webm', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.mpeg', '.mpg', '.ogv', '.3gp', '.flv', '.ts']);
 const SUPPORTED_IMAGE = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp']);
+async function walkMediaFiles(dir, results) {
+    let entries;
+    try {
+        entries = await fs.readdir(dir, { withFileTypes: true });
+    }
+    catch {
+        return;
+    }
+    for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            await walkMediaFiles(fullPath, results);
+            continue;
+        }
+        const ext = path.extname(entry.name).toLowerCase();
+        const isVideo = SUPPORTED_VIDEO.has(ext);
+        const isImage = SUPPORTED_IMAGE.has(ext);
+        const isEncrypted = ext === '.enc';
+        if (!isVideo && !isImage && !isEncrypted)
+            continue;
+        try {
+            const stat = await fs.stat(fullPath);
+            results.push({
+                name: entry.name,
+                path: fullPath,
+                extension: ext.replace('.', ''),
+                size: stat.size,
+                dateAdded: stat.birthtime.toISOString(),
+                dateModified: stat.mtime.toISOString(),
+                isEncrypted,
+            });
+        }
+        catch {
+            // skip files that can't be stat'd
+        }
+    }
+}
 ipcMain.handle('listMediaFiles', async (_event, folderPath) => {
     try {
-        const entries = await fs.readdir(folderPath, { withFileTypes: true });
         const results = [];
-        for (const entry of entries) {
-            if (entry.isDirectory())
-                continue;
-            const ext = path.extname(entry.name).toLowerCase();
-            const isVideo = SUPPORTED_VIDEO.has(ext);
-            const isImage = SUPPORTED_IMAGE.has(ext);
-            const isEncrypted = ext === '.enc';
-            if (!isVideo && !isImage && !isEncrypted)
-                continue;
-            const fullPath = path.join(folderPath, entry.name);
-            try {
-                const stat = await fs.stat(fullPath);
-                results.push({
-                    name: entry.name,
-                    path: fullPath,
-                    extension: ext.replace('.', ''),
-                    size: stat.size,
-                    dateAdded: stat.birthtime.toISOString(),
-                    dateModified: stat.mtime.toISOString(),
-                    isEncrypted,
-                });
-            }
-            catch {
-                // skip files that can't be stat'd
-            }
-        }
+        await walkMediaFiles(folderPath, results);
         return results;
     }
     catch (error) {

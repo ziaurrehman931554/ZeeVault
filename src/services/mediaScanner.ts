@@ -52,7 +52,11 @@ export class MediaScanner {
     );
   }
 
-  static metaToEncryptedVideos(meta: MetaFile, folderPath: string): VideoItem[] {
+  static metaToEncryptedVideos(
+    meta: MetaFile,
+    folderPath: string,
+    resolvePath?: (encryptedName: string) => string
+  ): VideoItem[] {
     const videos: VideoItem[] = [];
     for (const [encryptedName, entry] of Object.entries(meta.files)) {
       const details = typeof entry === 'string' ? {} as MetaVideoEntry : entry;
@@ -62,7 +66,9 @@ export class MediaScanner {
 
       const extension = originalName.split('.').pop() || '';
       const kind = this.classifyExtension(extension) || 'video';
-      const filePath = `${folderPath}\\${encryptedName}`;
+      const filePath = resolvePath
+        ? resolvePath(encryptedName)
+        : `${folderPath}\\${encryptedName}`;
 
       videos.push({
         id: filePath,
@@ -113,17 +119,24 @@ export class MediaScanner {
     return videos;
   }
 
+  private static dirOf(p: string): string {
+    const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+    return i >= 0 ? p.slice(0, i) : '';
+  }
+
   static mergeMedia(
     encrypted: VideoItem[],
     unencrypted: VideoItem[]
   ): VideoItem[] {
+    const keyOf = (v: VideoItem) =>
+      `${this.dirOf(v.filePath)}/${v.originalName.toLowerCase()}`;
     const encMap = new Map<string, VideoItem>();
     for (const e of encrypted) {
-      encMap.set(e.originalName.toLowerCase(), e);
+      encMap.set(keyOf(e), e);
     }
 
     for (const u of unencrypted) {
-      const key = u.originalName.toLowerCase();
+      const key = keyOf(u);
       if (!encMap.has(key)) {
         encMap.set(key, u);
       }
@@ -180,8 +193,9 @@ export class MediaScanner {
         const parts = relPath.split('/');
         const fileName = parts[parts.length - 1];
 
-        if (seen.has(fileName)) continue;
-        seen.add(fileName);
+        const seenKey = relPath.toLowerCase();
+        if (seen.has(seenKey)) continue;
+        seen.add(seenKey);
 
         if (fileName === 'vault.meta' || fileName === 'ZeeVault.ps1') continue;
 

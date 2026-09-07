@@ -237,16 +237,15 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
                   title={folder}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="14" height="14" aria-hidden="true">
-                    {hasMeta && !unlocked ? (
-                      <>
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                        <path d="M7 11V7a5 5 0 0110 0v4" />
-                      </>
-                    ) : (
-                      <path d="M3 7.5A2.5 2.5 0 015.5 5H10l2 2h6.5A2.5 2.5 0 0121 9.5v7A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5v-9z" />
-                    )}
+                    <path d="M3 7.5A2.5 2.5 0 015.5 5H10l2 2h6.5A2.5 2.5 0 0121 9.5v7A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5v-9z" />
                   </svg>
                   <span className="folder-chip-name">{folderDisplayName(folder)}</span>
+                  {hasMeta && (
+                    <span
+                      className={`folder-chip-dot${unlocked ? ' is-unlocked' : ''}`}
+                      title={unlocked ? 'Unlocked for this session' : 'Locked — enter password to play'}
+                    />
+                  )}
                   {hasMeta && !unlocked && (
                     <button
                       type="button"

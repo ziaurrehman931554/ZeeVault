@@ -426,20 +426,28 @@ const AppContent: React.FC = () => {
       for (const folder of newFolders) {
         if (!folder.path || existingPaths.has(folder.path.toLowerCase())) continue;
         try {
+          const scannedFiles = await MediaScanner.scanFolderFiles(
+            folder.path, folder.files, folder.files.length > 0 ? folder.path : undefined
+          );
           const fromScan = await MediaScanner.readMetaContent(folder.path, folder.files, folder.path);
           let meta: MetaFile | null = null;
           let encryptedVideos: VideoItem[] = [];
           if (fromScan) {
             meta = MediaScanner.parseMeta(fromScan);
             if (MediaScanner.isValidMetaFile(meta)) {
-              encryptedVideos = MediaScanner.metaToEncryptedVideos(meta, folder.path);
+              const encPathByName = new Map<string, string>();
+              for (const f of scannedFiles) {
+                if (f.isEncrypted) encPathByName.set(f.name.toLowerCase(), f.path);
+              }
+              encryptedVideos = MediaScanner.metaToEncryptedVideos(
+                meta,
+                folder.path,
+                (encryptedName: string) => encPathByName.get(encryptedName.toLowerCase()) ?? `${folder.path}\\${encryptedName}`
+              );
             } else {
               meta = null;
             }
           }
-          const scannedFiles = await MediaScanner.scanFolderFiles(
-            folder.path, folder.files, folder.files.length > 0 ? folder.path : undefined
-          );
           const unencryptedVideos = MediaScanner.scannedToUnencryptedVideos(scannedFiles, folder.path);
           const folderVideos = MediaScanner.mergeMedia(encryptedVideos, unencryptedVideos).filter((v) => {
             if (existingIds.has(v.id)) return false;
