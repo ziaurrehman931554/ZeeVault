@@ -146,6 +146,7 @@ const AppContent: React.FC = () => {
   const decryptJobsRef = useRef(decryptJobs);
   const readyOrderRef = useRef<string[]>([]);
   const unencryptedThumbsGeneratedRef = useRef(false);
+  const autoStartRef = useRef(true);
 
   const openSettings = useCallback(() => {
     setCurrentScreen('settings');
@@ -165,14 +166,29 @@ const AppContent: React.FC = () => {
     }, []
   );
 
+  const getNotifyCategory = useCallback((message: string): 'videosFound' | 'decrypt' | 'cache' | 'other' => {
+    const m = message.toLowerCase();
+    if (m.includes('media files') || m.includes('media files in')) return 'videosFound';
+    if (m.includes('decrypt') || m.includes('processing') || m.includes('ready:')) return 'decrypt';
+    if (m.includes('cache') || m.includes('cleared')) return 'cache';
+    return 'other';
+  }, []);
+
   const notify = useCallback(
     (message: string, type: NotificationItem['type'] = 'info') => {
+      const settings = useSettingsStore.getState();
+      const category = getNotifyCategory(message);
+      if (category === 'videosFound' && !settings.notifyVideosFound) return;
+      if (category === 'decrypt' && !settings.notifyDecrypt) return;
+      if (category === 'cache' && !settings.notifyCache) return;
+      if (category === 'other' && !settings.notifyOther) return;
+
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       setNotifications((items) => [...items, { id, type, message }]);
       window.setTimeout(() => {
         setNotifications((items) => items.filter((item) => item.id !== id));
       }, 4200);
-    }, []
+    }, [getNotifyCategory]
   );
 
   const readVideoFile = useCallback(
@@ -919,6 +935,8 @@ const AppContent: React.FC = () => {
         <LoginScreen
           onNotify={notify}
           savedFolderPaths={savedFolderPaths}
+          autoStart={autoStartRef.current}
+          onAutoStart={() => { autoStartRef.current = false; }}
           onClearSavedFolders={async () => {
             setSavedFolderPaths([]);
             try {
@@ -965,7 +983,6 @@ const AppContent: React.FC = () => {
           onLockFolder={handleLockFolder}
           onRemoveFolder={handleRemoveFolder}
           onAddFolders={handleAddFolders}
-          onNotify={notify}
         />
       )}
       {currentScreen === 'player' && (

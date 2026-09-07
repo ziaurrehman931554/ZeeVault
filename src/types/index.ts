@@ -58,6 +58,10 @@ export interface AppSettings {
   autoplay: boolean;
   defaultSpeed: number;
   autoPlayNext: boolean;
+  notifyVideosFound: boolean;
+  notifyDecrypt: boolean;
+  notifyCache: boolean;
+  notifyOther: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -69,6 +73,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoplay: true,
   defaultSpeed: 1,
   autoPlayNext: false,
+  notifyVideosFound: true,
+  notifyDecrypt: true,
+  notifyCache: true,
+  notifyOther: true,
 };
 
 export const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];

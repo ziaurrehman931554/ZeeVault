@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { MediaScanner } from '../services/mediaScanner';
@@ -13,6 +13,8 @@ interface LoginScreenProps {
   onNotify: (message: string, type?: 'success' | 'error' | 'info') => void;
   savedFolderPaths?: string[];
   onClearSavedFolders?: () => void;
+  autoStart?: boolean;
+  onAutoStart?: () => void;
 }
 
 const folderDisplayName = (path: string): string => {
@@ -20,7 +22,9 @@ const folderDisplayName = (path: string): string => {
   return parts[parts.length - 1] || path;
 };
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPaths, onClearSavedFolders }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({
+  onNotify, savedFolderPaths, onClearSavedFolders, autoStart = true, onAutoStart,
+}) => {
   const navigate = useNavigate();
   const [selected, setSelected] = useState<SelectedFolder[]>(() =>
     (savedFolderPaths || []).map((path) => ({ path, files: [] }))
@@ -29,6 +33,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPaths, o
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const allFilesRef = useRef<File[]>([]);
+  const autoStartedRef = useRef(false);
 
   const {
     setCurrentScreen,
@@ -143,6 +148,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPaths, o
       }
 
       setCurrentScreen('gallery');
+      onAutoStart?.();
       onNotify(
         failed
           ? `Loaded ${allVideos.length} media files from ${folderPaths.length} folder${folderPaths.length !== 1 ? 's' : ''} (${failed} skipped)`
@@ -158,7 +164,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onNotify, savedFolderPaths, o
     } finally {
       setLoading(false);
     }
-  }, [selected, scanFolder, onNotify, setAppError, setCurrentScreen, setFolderPaths, setMetas, setVideos, setBrowserFiles, navigate]);
+  }, [selected, scanFolder, onNotify, onAutoStart, setAppError, setCurrentScreen, setFolderPaths, setMetas, setVideos, setBrowserFiles, navigate]);
+
+  // Reopen: if folders were already saved, auto-load them straight into the
+  // gallery without forcing the user to pick folders again. Only runs once per
+  // session (not after logout), gated by the `autoStart` prop.
+  useEffect(() => {
+    if (!autoStart) return;
+    if (autoStartedRef.current) return;
+    if (!savedFolderPaths || savedFolderPaths.length === 0) return;
+    autoStartedRef.current = true;
+    void handleContinue();
+  }, [savedFolderPaths, handleContinue, autoStart]);
 
   const handleFolderSelect = async () => {
     if ((window as any).electronAPI?.selectFolders) {

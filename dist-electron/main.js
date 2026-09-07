@@ -212,7 +212,16 @@ ipcMain.handle('getStoredFolderPath', async () => {
 ipcMain.handle('setStoredFolderPath', async (_event, folderPath) => {
     try {
         const configPath = getConfigPath();
-        await fs.writeFile(configPath, JSON.stringify({ folderPath }), 'utf-8');
+        let config = {};
+        try {
+            const data = await fs.readFile(configPath, 'utf-8');
+            config = JSON.parse(data);
+        }
+        catch {
+            config = {};
+        }
+        config.folderPath = folderPath;
+        await fs.writeFile(configPath, JSON.stringify(config), 'utf-8');
         return true;
     }
     catch {
@@ -238,7 +247,16 @@ ipcMain.handle('setStoredFolderPaths', async (_event, folderPaths) => {
     try {
         const configPath = getConfigPath();
         const list = Array.isArray(folderPaths) ? folderPaths : [];
-        await fs.writeFile(configPath, JSON.stringify({ folderPaths: list }), 'utf-8');
+        let config = {};
+        try {
+            const data = await fs.readFile(configPath, 'utf-8');
+            config = JSON.parse(data);
+        }
+        catch {
+            config = {};
+        }
+        config.folderPaths = list;
+        await fs.writeFile(configPath, JSON.stringify(config), 'utf-8');
         return true;
     }
     catch {

@@ -13,6 +13,10 @@ interface SettingsStore extends AppSettings {
   setAutoplay: (autoplay: boolean) => void;
   setDefaultSpeed: (defaultSpeed: number) => void;
   setAutoPlayNext: (autoPlayNext: boolean) => void;
+  setNotifyVideosFound: (value: boolean) => void;
+  setNotifyDecrypt: (value: boolean) => void;
+  setNotifyCache: (value: boolean) => void;
+  setNotifyOther: (value: boolean) => void;
   resetSettings: () => void;
 }
 
@@ -35,6 +39,10 @@ const sanitizeSettings = (raw: any): AppSettings => {
   if (raw.autoplay === true || raw.autoplay === false) base.autoplay = raw.autoplay;
   if (typeof raw.defaultSpeed === 'number' && raw.defaultSpeed > 0) base.defaultSpeed = raw.defaultSpeed;
   if (raw.autoPlayNext === true || raw.autoPlayNext === false) base.autoPlayNext = raw.autoPlayNext;
+  if (raw.notifyVideosFound === true || raw.notifyVideosFound === false) base.notifyVideosFound = raw.notifyVideosFound;
+  if (raw.notifyDecrypt === true || raw.notifyDecrypt === false) base.notifyDecrypt = raw.notifyDecrypt;
+  if (raw.notifyCache === true || raw.notifyCache === false) base.notifyCache = raw.notifyCache;
+  if (raw.notifyOther === true || raw.notifyOther === false) base.notifyOther = raw.notifyOther;
   return base;
 };
 
@@ -87,6 +95,22 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
   setAutoPlayNext: (autoPlayNext) => {
     set({ autoPlayNext });
+    saveToDisk(get());
+  },
+  setNotifyVideosFound: (value) => {
+    set({ notifyVideosFound: value });
+    saveToDisk(get());
+  },
+  setNotifyDecrypt: (value) => {
+    set({ notifyDecrypt: value });
+    saveToDisk(get());
+  },
+  setNotifyCache: (value) => {
+    set({ notifyCache: value });
+    saveToDisk(get());
+  },
+  setNotifyOther: (value) => {
+    set({ notifyOther: value });
     saveToDisk(get());
   },
   resetSettings: () => {

@@ -12,7 +12,6 @@ interface SettingsScreenProps {
   onLockFolder: (folderPath: string) => void;
   onRemoveFolder: (folderPath: string) => void;
   onAddFolders: () => void;
-  onNotify: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 const folderDisplayName = (path: string): string => {
@@ -30,13 +29,14 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onLockFolder,
   onRemoveFolder,
   onAddFolders,
-  onNotify,
 }) => {
   const {
     userName, accentColor, accentCustom, videoCardSize,
     autoplay, defaultSpeed, autoPlayNext,
+    notifyVideosFound, notifyDecrypt, notifyCache, notifyOther,
     setUserName, setTheme, setAccentColor, setAccentCustom, setVideoCardSize,
     setAutoplay, setDefaultSpeed, setAutoPlayNext,
+    setNotifyVideosFound, setNotifyDecrypt, setNotifyCache, setNotifyOther,
   } = useSettingsStore();
 
   const [nameDraft, setNameDraft] = useState(userName);
@@ -45,22 +45,18 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const handleNameSave = () => {
     const trimmed = nameDraft.trim();
     setUserName(trimmed || 'Guest');
-    onNotify('Name updated', 'success');
   };
 
   const handleTheme = (t: ThemeMode) => {
     setTheme(t);
-    onNotify(`Switched to ${t === 'dark' ? 'dark' : 'light'} theme`, 'info');
   };
 
   const handleCardSize = (s: VideoCardSize) => {
     setVideoCardSize(s);
-    onNotify(`Card size: ${s}`, 'info');
   };
 
   const handleCustomColor = (hex: string) => {
     setAccentCustom(hex);
-    onNotify(`Accent color: ${hex}`, 'info');
   };
 
   const sectionTitle = (icon: React.ReactNode, title: string, desc: string) => (
@@ -157,10 +153,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       ['--swatch' as any]: preset.dark,
                     }}
                     title={preset.label}
-                    onClick={() => {
-                      setAccentColor(preset.key);
-                      onNotify(`Accent color: ${preset.label}`, 'info');
-                    }}
+                    onClick={() => setAccentColor(preset.key)}
                   >
                     {accentColor === preset.key && (
                       <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} width="14" height="14">
@@ -225,10 +218,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <input
                 type="checkbox"
                 checked={autoplay}
-                onChange={(e) => {
-                  setAutoplay(e.target.checked);
-                  onNotify(`Autoplay ${e.target.checked ? 'on' : 'off'}`, 'info');
-                }}
+                onChange={(e) => setAutoplay(e.target.checked)}
               />
               <span className="settings-toggle-track" />
             </label>
@@ -239,10 +229,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <input
                 type="checkbox"
                 checked={autoPlayNext}
-                onChange={(e) => {
-                  setAutoPlayNext(e.target.checked);
-                  onNotify(`Auto play next ${e.target.checked ? 'on' : 'off'}`, 'info');
-                }}
+                onChange={(e) => setAutoPlayNext(e.target.checked)}
               />
               <span className="settings-toggle-track" />
             </label>
@@ -255,15 +242,67 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   key={speed}
                   type="button"
                   className={`settings-seg-btn ${defaultSpeed === speed ? 'active' : ''}`}
-                  onClick={() => {
-                    setDefaultSpeed(speed);
-                    onNotify(`Default speed: ${speed}x`, 'info');
-                  }}
+                  onClick={() => setDefaultSpeed(speed)}
                 >
                   {speed}x
                 </button>
               ))}
             </div>
+          </div>
+        </section>
+
+        {/* Notifications */}
+        <section className="settings-card">
+          {sectionTitle(
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="20" height="20">
+              <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0" />
+            </svg>,
+            'Notifications',
+            'Choose which messages appear as toast notifications'
+          )}
+          <div className="settings-row">
+            <span className="settings-label">Videos found on load</span>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={notifyVideosFound}
+                onChange={(e) => setNotifyVideosFound(e.target.checked)}
+              />
+              <span className="settings-toggle-track" />
+            </label>
+          </div>
+          <div className="settings-row">
+            <span className="settings-label">Video decrypted / ready</span>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={notifyDecrypt}
+                onChange={(e) => setNotifyDecrypt(e.target.checked)}
+              />
+              <span className="settings-toggle-track" />
+            </label>
+          </div>
+          <div className="settings-row">
+            <span className="settings-label">Cache cleared</span>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={notifyCache}
+                onChange={(e) => setNotifyCache(e.target.checked)}
+              />
+              <span className="settings-toggle-track" />
+            </label>
+          </div>
+          <div className="settings-row">
+            <span className="settings-label">Other notifications</span>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={notifyOther}
+                onChange={(e) => setNotifyOther(e.target.checked)}
+              />
+              <span className="settings-toggle-track" />
+            </label>
           </div>
         </section>
 
