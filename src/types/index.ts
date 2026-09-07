@@ -49,6 +49,8 @@ export type AccentColor = 'sky' | 'emerald' | 'violet' | 'rose' | 'amber';
 
 export type VideoCardSize = 'small' | 'medium' | 'large';
 
+export type WindowMaterial = 'solid' | 'mica' | 'acrylic';
+
 export interface AppSettings {
   userName: string;
   theme: ThemeMode;
@@ -62,6 +64,7 @@ export interface AppSettings {
   notifyDecrypt: boolean;
   notifyCache: boolean;
   notifyOther: boolean;
+  windowMaterial: WindowMaterial;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -77,6 +80,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifyDecrypt: true,
   notifyCache: true,
   notifyOther: true,
+  windowMaterial: 'solid',
 };
 
 export const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];

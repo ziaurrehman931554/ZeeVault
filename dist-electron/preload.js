@@ -120,6 +120,14 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
             return false;
         }
     },
+    setWindowMaterial: async (material) => {
+        try {
+            return await electron_1.ipcRenderer.invoke('setWindowMaterial', material);
+        }
+        catch {
+            return false;
+        }
+    },
     checkPath: async (folderPath) => {
         try {
             return await electron_1.ipcRenderer.invoke('checkPath', folderPath);

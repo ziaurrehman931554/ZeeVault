@@ -119,6 +119,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
 
+  setWindowMaterial: async (material: string) => {
+    try {
+      return await ipcRenderer.invoke('setWindowMaterial', material);
+    } catch {
+      return false;
+    }
+  },
+
   checkPath: async (folderPath: string) => {
     try {
       return await ipcRenderer.invoke('checkPath', folderPath);

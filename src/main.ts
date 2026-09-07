@@ -1,5 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
-import path from 'path';
+import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 
@@ -12,7 +11,26 @@ const getConfigPath = () => {
 
 let mainWindow: BrowserWindow | null = null;
 
-const createWindow = () => {
+export type WindowMaterial = 'solid' | 'mica' | 'acrylic';
+
+const applyWindowMaterial = (material: WindowMaterial = 'solid') => {
+  if (!mainWindow || process.platform !== 'win32') return;
+  try {
+    const materialMap: Record<WindowMaterial, Parameters<BrowserWindow['setBackgroundMaterial']>[0]> = {
+      solid: 'none',
+      mica: 'mica',
+      acrylic: 'acrylic',
+    };
+    mainWindow.setBackgroundMaterial(materialMap[material]);
+    // A transparent window background lets the material show through the
+    // userland content; solid reverts to the normal opaque shell.
+    mainWindow.setBackgroundColor(material === 'solid' ? '#09090b' : '#00000000');
+  } catch {
+    // Material is unsupported (e.g. Windows 10 without acrylic, or older OS).
+  }
+};
+
+const createWindow = (initialMaterial: WindowMaterial = 'solid') => {
   Menu.setApplicationMenu(null);
   mainWindow = new BrowserWindow({
     title: 'ZeeVault',
@@ -21,12 +39,15 @@ const createWindow = () => {
     height: 900,
     minWidth: 1024,
     minHeight: 600,
+    backgroundColor: initialMaterial === 'solid' ? '#09090b' : '#00000000',
+    frame: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
     },
   });
+  applyWindowMaterial(initialMaterial);
 
   const isDev = process.env.NODE_ENV === 'development';
   const startUrl = isDev
@@ -53,8 +74,18 @@ const createWindow = () => {
   });
 };
 
-app.on('ready', () => {
-  createWindow();
+app.on('ready', async () => {
+  let initialMaterial: WindowMaterial = 'solid';
+  try {
+    const configPath = getConfigPath();
+    const data = await fs.readFile(configPath, 'utf-8');
+    const config = JSON.parse(data);
+    const m = config.settings?.windowMaterial;
+    if (m === 'mica' || m === 'acrylic') initialMaterial = m;
+  } catch {
+    // no saved material — default to solid
+  }
+  createWindow(initialMaterial);
 });
 
 app.on('window-all-closed', () => {
@@ -65,8 +96,13 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (mainWindow === null) {
-    createWindow();
+    createWindow('solid');
   }
+});
+
+ipcMain.handle('setWindowMaterial', (_event, material: unknown) => {
+  applyWindowMaterial(material === 'mica' || material === 'acrylic' ? material : 'solid');
+  return true;
 });
 
 // IPC Handlers

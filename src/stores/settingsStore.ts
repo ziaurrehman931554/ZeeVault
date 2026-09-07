@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AppSettings, DEFAULT_SETTINGS, ThemeMode, VideoCardSize } from '../types/index';
+import { AppSettings, DEFAULT_SETTINGS, ThemeMode, VideoCardSize, WindowMaterial } from '../types/index';
 
 export const SETTINGS_KEY = 'vault-settings';
 
@@ -17,6 +17,7 @@ interface SettingsStore extends AppSettings {
   setNotifyDecrypt: (value: boolean) => void;
   setNotifyCache: (value: boolean) => void;
   setNotifyOther: (value: boolean) => void;
+  setWindowMaterial: (material: WindowMaterial) => void;
   resetSettings: () => void;
 }
 
@@ -43,6 +44,9 @@ const sanitizeSettings = (raw: any): AppSettings => {
   if (raw.notifyDecrypt === true || raw.notifyDecrypt === false) base.notifyDecrypt = raw.notifyDecrypt;
   if (raw.notifyCache === true || raw.notifyCache === false) base.notifyCache = raw.notifyCache;
   if (raw.notifyOther === true || raw.notifyOther === false) base.notifyOther = raw.notifyOther;
+  if (raw.windowMaterial === 'solid' || raw.windowMaterial === 'mica' || raw.windowMaterial === 'acrylic') {
+    base.windowMaterial = raw.windowMaterial;
+  }
   return base;
 };
 
@@ -112,6 +116,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   setNotifyOther: (value) => {
     set({ notifyOther: value });
     saveToDisk(get());
+  },
+  setWindowMaterial: (material) => {
+    set({ windowMaterial: material });
+    saveToDisk(get());
+    if ((window as any).electronAPI?.setWindowMaterial) {
+      void (window as any).electronAPI.setWindowMaterial(material).catch(() => {});
+    }
   },
   resetSettings: () => {
     set({ ...DEFAULT_SETTINGS });

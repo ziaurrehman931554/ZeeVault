@@ -44,6 +44,7 @@ const AppContent: React.FC = () => {
   const settingsAccent = useSettingsStore((s) => s.accentColor);
   const settingsAccentCustom = useSettingsStore((s) => s.accentCustom);
   const settingsCardSize = useSettingsStore((s) => s.videoCardSize);
+  const settingsMaterial = useSettingsStore((s) => s.windowMaterial);
   const setSettingsTheme = useSettingsStore((s) => s.setTheme);
   const settingsHydrated = useSettingsStore((s) => s.hydrated);
 
@@ -63,6 +64,14 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (settingsHydrated) setTheme(settingsTheme);
   }, [settingsTheme, settingsHydrated]);
+
+  // Apply the native window material (Mica/Acrylic) once settings are hydrated.
+  useEffect(() => {
+    if (!settingsHydrated) return;
+    if ((window as any).electronAPI?.setWindowMaterial) {
+      void (window as any).electronAPI.setWindowMaterial(settingsMaterial).catch(() => {});
+    }
+  }, [settingsMaterial, settingsHydrated]);
 
   // Apply accent color via CSS variables on the document root (inherits down).
   useEffect(() => {
@@ -921,7 +930,7 @@ const AppContent: React.FC = () => {
   }, [pendingDecryptVideo, pendingUnlockFolder]);
 
   return (
-    <div className={`app-shell theme-${theme}`} data-accent={settingsAccent} data-cardsize={settingsCardSize}>
+    <div className={`app-shell theme-${theme}${settingsMaterial !== 'solid' ? ` material-${settingsMaterial}` : ''}`} data-accent={settingsAccent} data-cardsize={settingsCardSize}>
       <CustomScrollbar />
       <div className="ambient-shape shape-one" />
       <div className="ambient-shape shape-two" />

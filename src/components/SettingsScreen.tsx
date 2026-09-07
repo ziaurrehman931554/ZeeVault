@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
-import { ACCENT_PRESETS, MetaFile, PLAYBACK_SPEEDS, ThemeMode, VideoCardSize } from '../types/index';
+import { ACCENT_PRESETS, MetaFile, PLAYBACK_SPEEDS, ThemeMode, VideoCardSize, WindowMaterial } from '../types/index';
 
 interface SettingsScreenProps {
   folderPaths: string[];
@@ -34,9 +34,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
     userName, accentColor, accentCustom, videoCardSize,
     autoplay, defaultSpeed, autoPlayNext,
     notifyVideosFound, notifyDecrypt, notifyCache, notifyOther,
+    windowMaterial,
     setUserName, setTheme, setAccentColor, setAccentCustom, setVideoCardSize,
     setAutoplay, setDefaultSpeed, setAutoPlayNext,
     setNotifyVideosFound, setNotifyDecrypt, setNotifyCache, setNotifyOther,
+    setWindowMaterial,
   } = useSettingsStore();
 
   const [nameDraft, setNameDraft] = useState(userName);
@@ -134,6 +136,27 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   onClick={() => handleTheme(t)}
                 >
                   {t === 'dark' ? 'Dark' : 'Light'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="settings-row">
+            <span className="settings-label">Window style</span>
+            <div className="settings-segmented">
+              {([
+                { key: 'solid', label: 'Solid' },
+                { key: 'mica', label: 'Mica' },
+                { key: 'acrylic', label: 'Acrylic' },
+              ] as { key: WindowMaterial; label: string }[]).map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  className={`settings-seg-btn ${windowMaterial === opt.key ? 'active' : ''}`}
+                  onClick={() => setWindowMaterial(opt.key)}
+                  title={opt.key === 'solid' ? 'Standard opaque window' : opt.key === 'mica' ? 'Windows 11 wallpaper-tinted material' : 'Frosted glass blur'}
+                >
+                  {opt.label}
                 </button>
               ))}
             </div>
