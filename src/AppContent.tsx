@@ -12,7 +12,7 @@ import ImageViewer from './components/ImageViewer';
 import SubtitleSearchDialog from './components/SubtitleSearchDialog';
 import PasswordPrompt from './components/PasswordPrompt';
 import CustomScrollbar from './components/CustomScrollbar';
-import { DecryptJob, MetaFile, NotificationItem, ThemeMode, VideoItem } from './types/index';
+import { DecryptJob, MetaFile, NotificationItem, VideoItem } from './types/index';
 import { CryptoService } from './services/cryptoService';
 import { MediaScanner } from './services/mediaScanner';
 import { createMseBlob } from './services/tsTransmuxer';
@@ -37,7 +37,6 @@ const AppContent: React.FC = () => {
     setVideos, setThumbnailsReady,
   } = useAppStore();
   const { currentVideo, videoUrl, miniPlayer, setCurrentVideo, setIsDecrypting, setDecryptProgress, setVideoUrl } = usePlayerStore();
-  const [theme, setTheme] = useState<ThemeMode>('dark');
   const [savedFolderPaths, setSavedFolderPaths] = useState<string[] | null>(null);
 
   const settingsTheme = useSettingsStore((s) => s.theme);
@@ -45,6 +44,7 @@ const AppContent: React.FC = () => {
   const settingsAccentCustom = useSettingsStore((s) => s.accentCustom);
   const settingsCardSize = useSettingsStore((s) => s.videoCardSize);
   const settingsMaterial = useSettingsStore((s) => s.windowMaterial);
+  const settingsMaterialIntensity = useSettingsStore((s) => s.materialIntensity);
   const setSettingsTheme = useSettingsStore((s) => s.setTheme);
   const settingsHydrated = useSettingsStore((s) => s.hydrated);
 
@@ -58,12 +58,6 @@ const AppContent: React.FC = () => {
     })();
     return () => { cancelled = true; };
   }, []);
-
-  // Keep local theme in sync with persisted theme, and expose a setter that
-  // updates both state and the store.
-  useEffect(() => {
-    if (settingsHydrated) setTheme(settingsTheme);
-  }, [settingsTheme, settingsHydrated]);
 
   // Apply the native window material (Mica/Acrylic) once settings are hydrated.
   useEffect(() => {
@@ -90,9 +84,7 @@ const AppContent: React.FC = () => {
   }, [settingsAccent, settingsAccentCustom]);
 
   const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    setSettingsTheme(next);
+    setSettingsTheme(settingsTheme === 'dark' ? 'light' : 'dark');
   };
 
   useEffect(() => {
@@ -930,7 +922,14 @@ const AppContent: React.FC = () => {
   }, [pendingDecryptVideo, pendingUnlockFolder]);
 
   return (
-    <div className={`app-shell theme-${theme}${settingsMaterial !== 'solid' ? ` material-${settingsMaterial}` : ''}`} data-accent={settingsAccent} data-cardsize={settingsCardSize}>
+    <div
+      className={`app-shell theme-${settingsTheme}${settingsMaterial !== 'solid' ? ` material-${settingsMaterial}` : ''}`}
+      data-accent={settingsAccent}
+      data-cardsize={settingsCardSize}
+      style={settingsMaterial !== 'solid'
+        ? { ['--mtint' as any]: String(Math.max(0, Math.min(1, settingsMaterialIntensity / 100))) }
+        : undefined}
+    >
       <CustomScrollbar />
       <div className="ambient-shape shape-one" />
       <div className="ambient-shape shape-two" />
@@ -964,7 +963,7 @@ const AppContent: React.FC = () => {
         <VideoGallery
           decryptJobs={decryptJobs}
           collectiveProgress={collectiveProgress}
-          theme={theme}
+          theme={settingsTheme}
           folderPaths={folderPaths}
           metas={metas}
           passwords={passwords}
@@ -986,7 +985,7 @@ const AppContent: React.FC = () => {
           folderPaths={folderPaths}
           metas={metas}
           passwords={passwords}
-          theme={theme}
+          theme={settingsTheme}
           onBack={closeSettings}
           onUnlockFolder={handleUnlockFolder}
           onLockFolder={handleLockFolder}

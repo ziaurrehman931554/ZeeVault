@@ -34,11 +34,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
     userName, accentColor, accentCustom, videoCardSize,
     autoplay, defaultSpeed, autoPlayNext,
     notifyVideosFound, notifyDecrypt, notifyCache, notifyOther,
-    windowMaterial,
+    windowMaterial, materialIntensity,
     setUserName, setTheme, setAccentColor, setAccentCustom, setVideoCardSize,
     setAutoplay, setDefaultSpeed, setAutoPlayNext,
     setNotifyVideosFound, setNotifyDecrypt, setNotifyCache, setNotifyOther,
-    setWindowMaterial,
+    setWindowMaterial, setMaterialIntensity,
   } = useSettingsStore();
 
   const [nameDraft, setNameDraft] = useState(userName);
@@ -161,6 +161,27 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
               ))}
             </div>
           </div>
+
+          {windowMaterial !== 'solid' && (
+            <div className="settings-row">
+              <span className="settings-label">
+                Material intensity
+                <em className="settings-hint">{materialIntensity}%</em>
+              </span>
+              <div className="settings-control">
+                <input
+                  className="settings-range"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={materialIntensity}
+                  onChange={(e) => setMaterialIntensity(Number(e.target.value))}
+                  aria-label="Material intensity"
+                />
+              </div>
+            </div>
+          )}
 
           <div className="settings-row">
             <span className="settings-label">Accent color</span>

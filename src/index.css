@@ -81,24 +81,42 @@ button:disabled {
     linear-gradient(135deg, #ffffff 0%, #eef9ff 50%, #f8fafc 100%);
 }
 
-/* When a native window material (Mica/Acrylic) is active, let it show through a
-   translucent shell background instead of a fully opaque one. */
+/* ---- Native window material modes ---------------------------------------
+   When Mica/Acrylic is active the shell keeps only a light tint overlay so the
+   DWM material (which the native title bar already shows) can render cleanly
+   behind the page. No full-window backdrop-filter: that double-frosted the
+   view, darkened it, made Mica look identical to Acrylic, and caused stale
+   compositing until a repaint was forced.
+   --mtint (0..1, set inline by the renderer) drives the material intensity. */
+.app-shell.material-mica {
+  --material-a: rgb(14 14 19 / calc(0.13 + (1 - var(--mtint, 0.5)) * 0.44));
+  --material-b: rgb(17 17 22 / calc(0.11 + (1 - var(--mtint, 0.5)) * 0.40));
+  --material-c: rgb(14 14 18 / calc(0.12 + (1 - var(--mtint, 0.5)) * 0.42));
+}
+
+.app-shell.material-acrylic {
+  --material-a: rgb(8 8 12 / calc(0.05 + (1 - var(--mtint, 0.5)) * 0.26));
+  --material-b: rgb(10 10 14 / calc(0.04 + (1 - var(--mtint, 0.5)) * 0.22));
+  --material-c: rgb(9 9 13 / calc(0.045 + (1 - var(--mtint, 0.5)) * 0.24));
+}
+
+.app-shell.material-mica.theme-light {
+  --material-a: rgb(255 255 255 / calc(0.17 + (1 - var(--mtint, 0.5)) * 0.46));
+  --material-b: rgb(250 252 255 / calc(0.15 + (1 - var(--mtint, 0.5)) * 0.42));
+  --material-c: rgb(252 254 255 / calc(0.16 + (1 - var(--mtint, 0.5)) * 0.44));
+}
+
+.app-shell.material-acrylic.theme-light {
+  --material-a: rgb(255 255 255 / calc(0.09 + (1 - var(--mtint, 0.5)) * 0.28));
+  --material-b: rgb(252 254 255 / calc(0.08 + (1 - var(--mtint, 0.5)) * 0.24));
+  --material-c: rgb(254 255 255 / calc(0.085 + (1 - var(--mtint, 0.5)) * 0.26));
+}
+
 .app-shell.material-mica,
 .app-shell.material-acrylic {
   background:
-    radial-gradient(circle at top left, rgba(120, 120, 130, 0.1), transparent 32rem),
-    linear-gradient(135deg, rgba(10, 10, 14, 0.55) 0%, rgba(18, 18, 22, 0.45) 48%, rgba(10, 10, 12, 0.5) 100%);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-}
-
-.app-shell.material-mica.theme-light,
-.app-shell.material-acrylic.theme-light {
-  background:
-    radial-gradient(circle at top left, rgba(125, 211, 252, 0.18), transparent 30rem),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(238, 249, 255, 0.4) 50%, rgba(248, 250, 252, 0.45) 100%);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
+    radial-gradient(circle at top left, rgba(140, 150, 165, 0.08), transparent 32rem),
+    linear-gradient(135deg, var(--material-a) 0%, var(--material-b) 48%, var(--material-c) 100%);
 }
 
 /* Panels become a touch more translucent under a material so the blur reads. */
@@ -4585,6 +4603,51 @@ button:disabled {
   font-weight: 600;
   color: var(--text);
   flex-shrink: 0;
+}
+
+.settings-hint {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-style: normal;
+  color: var(--accent);
+}
+
+.settings-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  max-width: 260px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+  outline: none;
+  cursor: pointer;
+}
+
+.settings-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  transition: transform 0.12s;
+}
+
+.settings-range::-webkit-slider-thumb:hover {
+  transform: scale(1.12);
+}
+
+.settings-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 .settings-control {

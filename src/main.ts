@@ -11,6 +11,33 @@ const getConfigPath = () => {
 
 let mainWindow: BrowserWindow | null = null;
 
+// Serialize config read-modify-write cycles so two IPC handlers can't stomp
+// each other's keys (e.g. folder paths being saved while a settings write is
+// in flight, which would silently drop the settings object).
+let configWriteChain: Promise<unknown> = Promise.resolve();
+const updateConfigFile = async (update: (config: Record<string, unknown>) => void): Promise<boolean> => {
+  const run = async (): Promise<boolean> => {
+    try {
+      const configPath = getConfigPath();
+      let config: Record<string, unknown> = {};
+      try {
+        const data = await fs.readFile(configPath, 'utf-8');
+        config = JSON.parse(data);
+      } catch {
+        config = {};
+      }
+      update(config);
+      await fs.writeFile(configPath, JSON.stringify(config), 'utf-8');
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const result = configWriteChain.then(run);
+  configWriteChain = result.catch(() => undefined);
+  return result;
+};
+
 export type WindowMaterial = 'solid' | 'mica' | 'acrylic';
 
 const applyWindowMaterial = (material: WindowMaterial = 'solid') => {
@@ -266,23 +293,11 @@ ipcMain.handle('getStoredFolderPath', async () => {
   }
 });
 
-ipcMain.handle('setStoredFolderPath', async (_event, folderPath: string) => {
-  try {
-    const configPath = getConfigPath();
-    let config: Record<string, unknown> = {};
-    try {
-      const data = await fs.readFile(configPath, 'utf-8');
-      config = JSON.parse(data);
-    } catch {
-      config = {};
-    }
+ipcMain.handle('setStoredFolderPath', async (_event, folderPath: string) =>
+  updateConfigFile((config) => {
     config.folderPath = folderPath;
-    await fs.writeFile(configPath, JSON.stringify(config), 'utf-8');
-    return true;
-  } catch {
-    return false;
-  }
-});
+  })
+);
 
 ipcMain.handle('getStoredFolderPaths', async () => {
   try {
@@ -297,24 +312,11 @@ ipcMain.handle('getStoredFolderPaths', async () => {
   }
 });
 
-ipcMain.handle('setStoredFolderPaths', async (_event, folderPaths: string[]) => {
-  try {
-    const configPath = getConfigPath();
-    const list = Array.isArray(folderPaths) ? folderPaths : [];
-    let config: Record<string, unknown> = {};
-    try {
-      const data = await fs.readFile(configPath, 'utf-8');
-      config = JSON.parse(data);
-    } catch {
-      config = {};
-    }
-    config.folderPaths = list;
-    await fs.writeFile(configPath, JSON.stringify(config), 'utf-8');
-    return true;
-  } catch {
-    return false;
-  }
-});
+ipcMain.handle('setStoredFolderPaths', async (_event, folderPaths: string[]) =>
+  updateConfigFile((config) => {
+    config.folderPaths = Array.isArray(folderPaths) ? folderPaths : [];
+  })
+);
 
 ipcMain.handle('getSettings', async () => {
   try {
@@ -327,24 +329,11 @@ ipcMain.handle('getSettings', async () => {
   }
 });
 
-ipcMain.handle('setSettings', async (_event, settings: unknown) => {
-  try {
-    const configPath = getConfigPath();
-    let config: Record<string, unknown> = {};
-    try {
-      const data = await fs.readFile(configPath, 'utf-8');
-      config = JSON.parse(data);
-    } catch {
-      config = {};
-    }
+ipcMain.handle('setSettings', async (_event, settings: unknown) =>
+  updateConfigFile((config) => {
     config.settings = settings || {};
-    // Preserve the legacy single-path key the app still reads on restore.
-    await fs.writeFile(configPath, JSON.stringify(config), 'utf-8');
-    return true;
-  } catch {
-    return false;
-  }
-});
+  })
+);
 
 ipcMain.handle('checkPath', async (_event, folderPath: string) => {
   try {

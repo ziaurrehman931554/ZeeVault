@@ -8,6 +8,34 @@ const getConfigPath = () => {
     return path.join(app.getPath('userData'), 'zeevault-config.json');
 };
 let mainWindow = null;
+// Serialize config read-modify-write cycles so two IPC handlers can't stomp
+// each other's keys (e.g. folder paths being saved while a settings write is
+// in flight, which would silently drop the settings object).
+let configWriteChain = Promise.resolve();
+const updateConfigFile = async (update) => {
+    const run = async () => {
+        try {
+            const configPath = getConfigPath();
+            let config = {};
+            try {
+                const data = await fs.readFile(configPath, 'utf-8');
+                config = JSON.parse(data);
+            }
+            catch {
+                config = {};
+            }
+            update(config);
+            await fs.writeFile(configPath, JSON.stringify(config), 'utf-8');
+            return true;
+        }
+        catch {
+            return false;
+        }
+    };
+    const result = configWriteChain.then(run);
+    configWriteChain = result.catch(() => undefined);
+    return result;
+};
 const applyWindowMaterial = (material = 'solid') => {
     if (!mainWindow || process.platform !== 'win32')
         return;
@@ -246,25 +274,9 @@ ipcMain.handle('getStoredFolderPath', async () => {
         return null;
     }
 });
-ipcMain.handle('setStoredFolderPath', async (_event, folderPath) => {
-    try {
-        const configPath = getConfigPath();
-        let config = {};
-        try {
-            const data = await fs.readFile(configPath, 'utf-8');
-            config = JSON.parse(data);
-        }
-        catch {
-            config = {};
-        }
-        config.folderPath = folderPath;
-        await fs.writeFile(configPath, JSON.stringify(config), 'utf-8');
-        return true;
-    }
-    catch {
-        return false;
-    }
-});
+ipcMain.handle('setStoredFolderPath', async (_event, folderPath) => updateConfigFile((config) => {
+    config.folderPath = folderPath;
+}));
 ipcMain.handle('getStoredFolderPaths', async () => {
     try {
         const configPath = getConfigPath();
@@ -280,26 +292,9 @@ ipcMain.handle('getStoredFolderPaths', async () => {
         return [];
     }
 });
-ipcMain.handle('setStoredFolderPaths', async (_event, folderPaths) => {
-    try {
-        const configPath = getConfigPath();
-        const list = Array.isArray(folderPaths) ? folderPaths : [];
-        let config = {};
-        try {
-            const data = await fs.readFile(configPath, 'utf-8');
-            config = JSON.parse(data);
-        }
-        catch {
-            config = {};
-        }
-        config.folderPaths = list;
-        await fs.writeFile(configPath, JSON.stringify(config), 'utf-8');
-        return true;
-    }
-    catch {
-        return false;
-    }
-});
+ipcMain.handle('setStoredFolderPaths', async (_event, folderPaths) => updateConfigFile((config) => {
+    config.folderPaths = Array.isArray(folderPaths) ? folderPaths : [];
+}));
 ipcMain.handle('getSettings', async () => {
     try {
         const configPath = getConfigPath();
@@ -311,26 +306,9 @@ ipcMain.handle('getSettings', async () => {
         return null;
     }
 });
-ipcMain.handle('setSettings', async (_event, settings) => {
-    try {
-        const configPath = getConfigPath();
-        let config = {};
-        try {
-            const data = await fs.readFile(configPath, 'utf-8');
-            config = JSON.parse(data);
-        }
-        catch {
-            config = {};
-        }
-        config.settings = settings || {};
-        // Preserve the legacy single-path key the app still reads on restore.
-        await fs.writeFile(configPath, JSON.stringify(config), 'utf-8');
-        return true;
-    }
-    catch {
-        return false;
-    }
-});
+ipcMain.handle('setSettings', async (_event, settings) => updateConfigFile((config) => {
+    config.settings = settings || {};
+}));
 ipcMain.handle('checkPath', async (_event, folderPath) => {
     try {
         if (typeof folderPath !== 'string' || !folderPath)

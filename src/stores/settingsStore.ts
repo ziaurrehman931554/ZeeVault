@@ -18,6 +18,7 @@ interface SettingsStore extends AppSettings {
   setNotifyCache: (value: boolean) => void;
   setNotifyOther: (value: boolean) => void;
   setWindowMaterial: (material: WindowMaterial) => void;
+  setMaterialIntensity: (value: number) => void;
   resetSettings: () => void;
 }
 
@@ -47,15 +48,38 @@ const sanitizeSettings = (raw: any): AppSettings => {
   if (raw.windowMaterial === 'solid' || raw.windowMaterial === 'mica' || raw.windowMaterial === 'acrylic') {
     base.windowMaterial = raw.windowMaterial;
   }
+  if (typeof raw.materialIntensity === 'number' && Number.isFinite(raw.materialIntensity)) {
+    base.materialIntensity = Math.max(0, Math.min(100, Math.round(raw.materialIntensity)));
+  }
   return base;
 };
+
+// IPC serializes with the structured-clone algorithm, which throws on
+// functions. The store state carries action functions, so strip them before
+// crossing the bridge or the write silently never happens.
+const toPlainSettings = (settings: AppSettings): AppSettings => ({
+  userName: settings.userName,
+  theme: settings.theme,
+  accentColor: settings.accentColor,
+  accentCustom: settings.accentCustom,
+  videoCardSize: settings.videoCardSize,
+  autoplay: settings.autoplay,
+  defaultSpeed: settings.defaultSpeed,
+  autoPlayNext: settings.autoPlayNext,
+  notifyVideosFound: settings.notifyVideosFound,
+  notifyDecrypt: settings.notifyDecrypt,
+  notifyCache: settings.notifyCache,
+  notifyOther: settings.notifyOther,
+  windowMaterial: settings.windowMaterial,
+  materialIntensity: settings.materialIntensity,
+});
 
 const saveToDisk = (settings: AppSettings) => {
   try {
     if ((window as any).electronAPI?.setSettings) {
-      void (window as any).electronAPI.setSettings(settings).catch(() => {});
+      void (window as any).electronAPI.setSettings(toPlainSettings(settings)).catch(() => {});
     } else {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(toPlainSettings(settings)));
     }
   } catch {
     // ignore persistence errors
@@ -123,6 +147,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     if ((window as any).electronAPI?.setWindowMaterial) {
       void (window as any).electronAPI.setWindowMaterial(material).catch(() => {});
     }
+  },
+  setMaterialIntensity: (value) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(value)));
+    set({ materialIntensity: clamped });
+    saveToDisk(get());
   },
   resetSettings: () => {
     set({ ...DEFAULT_SETTINGS });
