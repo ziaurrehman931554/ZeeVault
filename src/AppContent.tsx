@@ -972,7 +972,11 @@ const AppContent: React.FC = () => {
         <VideoPlayer
           videoUrl={videoUrl}
           currentVideo={currentVideo}
-          resumeTime={miniPlayer?.currentTime}
+          resumeTime={
+            miniPlayer?.currentVideo?.id === currentVideo?.id
+              ? miniPlayer?.currentTime
+              : undefined
+          }
           autoplay={useSettingsStore.getState().autoplay}
           defaultSpeed={useSettingsStore.getState().defaultSpeed}
           autoPlayNext={useSettingsStore.getState().autoPlayNext}

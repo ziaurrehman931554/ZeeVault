@@ -341,7 +341,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
     };
     const onPause = () => { setIsPlaying(false); showAllControls(); if (controlsTimerRef.current) { clearTimeout(controlsTimerRef.current); controlsTimerRef.current = null; } };
     const onWaiting = () => { setIsLoading(true); };
-    const onCanPlay = () => { setIsLoading(false); };
+    const onCanPlay = () => {
+      setIsLoading(false);
+      if (el.playbackRate !== defaultSpeed) {
+        el.defaultPlaybackRate = defaultSpeed;
+        el.playbackRate = defaultSpeed;
+      }
+    };
     const onProgress = () => {
       if (el.buffered.length > 0) {
         setBuffered(el.buffered.end(el.buffered.length - 1));
@@ -403,10 +409,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
     if (videoUrl) {
       const video = videoRef.current;
       if (video) {
+        video.defaultPlaybackRate = defaultSpeed;
         video.playbackRate = defaultSpeed;
         const shouldAdvance = advanceRef.current;
         advanceRef.current = false;
         const startPlayback = () => {
+          video.playbackRate = defaultSpeed;
           if (autoplay || shouldAdvance) {
             userPlayRef.current = true;
             video.play().catch(() => undefined);
