@@ -22,6 +22,31 @@ import { ACCENT_PRESETS, DEFAULT_SETTINGS } from './types/index';
 
 const MAX_READY_CACHE = 20;
 
+// Compute the shell background tint alphas for the native window materials.
+// intensity (0-100) = how "clear" the glass is (100 = pure/transparent).
+// opacity (0-100) = backdrop opacity blended toward fully opaque (material hidden).
+const materialTints = (
+  material: 'mica' | 'acrylic',
+  isLight: boolean,
+  intensity: number,
+  opacity: number,
+): { a: number; b: number; c: number } => {
+  const i = Math.max(0, Math.min(1, intensity / 100));
+  const o = Math.max(0, Math.min(1, opacity / 100));
+  const defs = material === 'mica'
+    ? isLight
+      ? [{ min: 0.17, span: 0.46 }, { min: 0.15, span: 0.42 }, { min: 0.16, span: 0.44 }]
+      : [{ min: 0.13, span: 0.44 }, { min: 0.11, span: 0.4 }, { min: 0.12, span: 0.42 }]
+    : isLight
+      ? [{ min: 0.09, span: 0.28 }, { min: 0.08, span: 0.24 }, { min: 0.085, span: 0.26 }]
+      : [{ min: 0.05, span: 0.26 }, { min: 0.04, span: 0.22 }, { min: 0.045, span: 0.24 }];
+  const stop = (min: number, span: number) => {
+    const alpha = min + (1 - i) * span;
+    return alpha + (1 - alpha) * o;
+  };
+  return { a: stop(defs[0].min, defs[0].span), b: stop(defs[1].min, defs[1].span), c: stop(defs[2].min, defs[2].span) };
+};
+
 const folderDisplayName = (path: string): string => {
   const parts = path.split(/[\\/]+/).filter(Boolean);
   return parts[parts.length - 1] || path;
@@ -45,6 +70,7 @@ const AppContent: React.FC = () => {
   const settingsCardSize = useSettingsStore((s) => s.videoCardSize);
   const settingsMaterial = useSettingsStore((s) => s.windowMaterial);
   const settingsMaterialIntensity = useSettingsStore((s) => s.materialIntensity);
+  const settingsBackdropOpacity = useSettingsStore((s) => s.backdropOpacity);
   const setSettingsTheme = useSettingsStore((s) => s.setTheme);
   const settingsHydrated = useSettingsStore((s) => s.hydrated);
 
@@ -921,14 +947,23 @@ const AppContent: React.FC = () => {
     return 'Enter the vault password to access encrypted content.';
   }, [pendingDecryptVideo, pendingUnlockFolder]);
 
+  const shellStyle = settingsMaterial === 'mica' || settingsMaterial === 'acrylic'
+    ? (() => {
+        const tints = materialTints(settingsMaterial, settingsTheme === 'light', settingsMaterialIntensity, settingsBackdropOpacity);
+        return {
+          ['--material-a' as any]: String(tints.a.toFixed(3)),
+          ['--material-b' as any]: String(tints.b.toFixed(3)),
+          ['--material-c' as any]: String(tints.c.toFixed(3)),
+        };
+      })()
+    : undefined;
+
   return (
     <div
       className={`app-shell theme-${settingsTheme}${settingsMaterial !== 'solid' ? ` material-${settingsMaterial}` : ''}`}
       data-accent={settingsAccent}
       data-cardsize={settingsCardSize}
-      style={settingsMaterial !== 'solid'
-        ? { ['--mtint' as any]: String(Math.max(0, Math.min(1, settingsMaterialIntensity / 100))) }
-        : undefined}
+      style={shellStyle}
     >
       <CustomScrollbar />
       <div className="ambient-shape shape-one" />

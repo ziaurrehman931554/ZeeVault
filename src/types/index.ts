@@ -66,6 +66,7 @@ export interface AppSettings {
   notifyOther: boolean;
   windowMaterial: WindowMaterial;
   materialIntensity: number;
+  backdropOpacity: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -82,7 +83,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifyCache: true,
   notifyOther: true,
   windowMaterial: 'solid',
-  materialIntensity: 50,
+  materialIntensity: 100,
+  backdropOpacity: 0,
 };
 
 export const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];

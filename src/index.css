@@ -87,36 +87,30 @@ button:disabled {
    behind the page. No full-window backdrop-filter: that double-frosted the
    view, darkened it, made Mica look identical to Acrylic, and caused stale
    compositing until a repaint was forced.
-   --mtint (0..1, set inline by the renderer) drives the material intensity. */
+   The tint alpha stops (--material-a/b/c) are computed by the renderer from
+   the material-intensity and backdrop-opacity settings and set inline. */
 .app-shell.material-mica {
-  --material-a: rgb(14 14 19 / calc(0.13 + (1 - var(--mtint, 0.5)) * 0.44));
-  --material-b: rgb(17 17 22 / calc(0.11 + (1 - var(--mtint, 0.5)) * 0.40));
-  --material-c: rgb(14 14 18 / calc(0.12 + (1 - var(--mtint, 0.5)) * 0.42));
+  background:
+    radial-gradient(circle at top left, rgba(140, 150, 165, 0.06), transparent 32rem),
+    linear-gradient(135deg, rgb(14 14 19 / var(--material-a)) 0%, rgb(17 17 22 / var(--material-b)) 48%, rgb(14 14 18 / var(--material-c)) 100%);
 }
 
 .app-shell.material-acrylic {
-  --material-a: rgb(8 8 12 / calc(0.05 + (1 - var(--mtint, 0.5)) * 0.26));
-  --material-b: rgb(10 10 14 / calc(0.04 + (1 - var(--mtint, 0.5)) * 0.22));
-  --material-c: rgb(9 9 13 / calc(0.045 + (1 - var(--mtint, 0.5)) * 0.24));
+  background:
+    radial-gradient(circle at top left, rgba(140, 150, 165, 0.04), transparent 32rem),
+    linear-gradient(135deg, rgb(8 8 12 / var(--material-a)) 0%, rgb(10 10 14 / var(--material-b)) 48%, rgb(9 9 13 / var(--material-c)) 100%);
 }
 
 .app-shell.material-mica.theme-light {
-  --material-a: rgb(255 255 255 / calc(0.17 + (1 - var(--mtint, 0.5)) * 0.46));
-  --material-b: rgb(250 252 255 / calc(0.15 + (1 - var(--mtint, 0.5)) * 0.42));
-  --material-c: rgb(252 254 255 / calc(0.16 + (1 - var(--mtint, 0.5)) * 0.44));
+  background:
+    radial-gradient(circle at top left, rgba(125, 200, 255, 0.1), transparent 30rem),
+    linear-gradient(135deg, rgb(255 255 255 / var(--material-a)) 0%, rgb(250 252 255 / var(--material-b)) 48%, rgb(252 254 255 / var(--material-c)) 100%);
 }
 
 .app-shell.material-acrylic.theme-light {
-  --material-a: rgb(255 255 255 / calc(0.09 + (1 - var(--mtint, 0.5)) * 0.28));
-  --material-b: rgb(252 254 255 / calc(0.08 + (1 - var(--mtint, 0.5)) * 0.24));
-  --material-c: rgb(254 255 255 / calc(0.085 + (1 - var(--mtint, 0.5)) * 0.26));
-}
-
-.app-shell.material-mica,
-.app-shell.material-acrylic {
   background:
-    radial-gradient(circle at top left, rgba(140, 150, 165, 0.08), transparent 32rem),
-    linear-gradient(135deg, var(--material-a) 0%, var(--material-b) 48%, var(--material-c) 100%);
+    radial-gradient(circle at top left, rgba(125, 200, 255, 0.07), transparent 30rem),
+    linear-gradient(135deg, rgb(255 255 255 / var(--material-a)) 0%, rgb(252 254 255 / var(--material-b)) 48%, rgb(254 255 255 / var(--material-c)) 100%);
 }
 
 /* Panels become a touch more translucent under a material so the blur reads. */

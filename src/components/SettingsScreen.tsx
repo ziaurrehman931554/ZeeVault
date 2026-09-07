@@ -34,11 +34,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
     userName, accentColor, accentCustom, videoCardSize,
     autoplay, defaultSpeed, autoPlayNext,
     notifyVideosFound, notifyDecrypt, notifyCache, notifyOther,
-    windowMaterial, materialIntensity,
+    windowMaterial, materialIntensity, backdropOpacity,
     setUserName, setTheme, setAccentColor, setAccentCustom, setVideoCardSize,
     setAutoplay, setDefaultSpeed, setAutoPlayNext,
     setNotifyVideosFound, setNotifyDecrypt, setNotifyCache, setNotifyOther,
-    setWindowMaterial, setMaterialIntensity,
+    setWindowMaterial, setMaterialIntensity, setBackdropOpacity,
   } = useSettingsStore();
 
   const [nameDraft, setNameDraft] = useState(userName);
@@ -178,6 +178,29 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   value={materialIntensity}
                   onChange={(e) => setMaterialIntensity(Number(e.target.value))}
                   aria-label="Material intensity"
+                  title="How clear the glass looks — 100% is pure and transparent"
+                />
+              </div>
+            </div>
+          )}
+
+          {windowMaterial !== 'solid' && (
+            <div className="settings-row">
+              <span className="settings-label">
+                Background opacity
+                <em className="settings-hint">{backdropOpacity}%</em>
+              </span>
+              <div className="settings-control">
+                <input
+                  className="settings-range"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={backdropOpacity}
+                  onChange={(e) => setBackdropOpacity(Number(e.target.value))}
+                  aria-label="Background opacity"
+                  title="How opaque the app background is — 0% is see-through glass, 100% hides the material behind a solid background"
                 />
               </div>
             </div>

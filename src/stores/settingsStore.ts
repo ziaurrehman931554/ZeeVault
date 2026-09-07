@@ -19,6 +19,7 @@ interface SettingsStore extends AppSettings {
   setNotifyOther: (value: boolean) => void;
   setWindowMaterial: (material: WindowMaterial) => void;
   setMaterialIntensity: (value: number) => void;
+  setBackdropOpacity: (value: number) => void;
   resetSettings: () => void;
 }
 
@@ -51,6 +52,9 @@ const sanitizeSettings = (raw: any): AppSettings => {
   if (typeof raw.materialIntensity === 'number' && Number.isFinite(raw.materialIntensity)) {
     base.materialIntensity = Math.max(0, Math.min(100, Math.round(raw.materialIntensity)));
   }
+  if (typeof raw.backdropOpacity === 'number' && Number.isFinite(raw.backdropOpacity)) {
+    base.backdropOpacity = Math.max(0, Math.min(100, Math.round(raw.backdropOpacity)));
+  }
   return base;
 };
 
@@ -72,6 +76,7 @@ const toPlainSettings = (settings: AppSettings): AppSettings => ({
   notifyOther: settings.notifyOther,
   windowMaterial: settings.windowMaterial,
   materialIntensity: settings.materialIntensity,
+  backdropOpacity: settings.backdropOpacity,
 });
 
 const saveToDisk = (settings: AppSettings) => {
@@ -151,6 +156,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   setMaterialIntensity: (value) => {
     const clamped = Math.max(0, Math.min(100, Math.round(value)));
     set({ materialIntensity: clamped });
+    saveToDisk(get());
+  },
+  setBackdropOpacity: (value) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(value)));
+    set({ backdropOpacity: clamped });
     saveToDisk(get());
   },
   resetSettings: () => {

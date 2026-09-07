@@ -52,6 +52,10 @@ const applyWindowMaterial = (material: WindowMaterial = 'solid') => {
     // A transparent window background lets the material show through the
     // userland content; solid reverts to the normal opaque shell.
     mainWindow.setBackgroundColor(material === 'solid' ? '#09090b' : '#00000000');
+    // DWM sometimes leaves the client area opaque until a repaint is forced,
+    // so schedule one now (otherwise the material only appears after the user
+    // interacts with the window, e.g. clicking an input).
+    mainWindow.webContents.invalidate();
   } catch {
     // Material is unsupported (e.g. Windows 10 without acrylic, or older OS).
   }
@@ -88,6 +92,9 @@ const createWindow = (initialMaterial: WindowMaterial = 'solid') => {
       ::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
       html { scrollbar-width: none !important; }
     `);
+    // Re-apply now that the page is painted and the window is sized; the
+    // invalidate() inside forces the material to actually composite.
+    applyWindowMaterial(initialMaterial);
   });
 
   mainWindow.maximize();
