@@ -23,28 +23,33 @@ import { ACCENT_PRESETS, DEFAULT_SETTINGS } from './types/index';
 const MAX_READY_CACHE = 20;
 
 // Compute the shell background tint alphas for the native window materials.
-// intensity (0-100) = how "clear" the glass is (100 = pure/transparent).
-// opacity (0-100) = backdrop opacity blended toward fully opaque (material hidden).
+// intensity (0-100) = how strongly frosted the glass is (also maps to blur px).
+// opacity (0-100) = backdrop tint blended toward fully opaque (material hidden).
 const materialTints = (
   material: 'mica' | 'acrylic',
   isLight: boolean,
   intensity: number,
   opacity: number,
-): { a: number; b: number; c: number } => {
+): { a: number; b: number; c: number; blurPx: number } => {
   const i = Math.max(0, Math.min(1, intensity / 100));
   const o = Math.max(0, Math.min(1, opacity / 100));
   const defs = material === 'mica'
     ? isLight
-      ? [{ min: 0.17, span: 0.46 }, { min: 0.15, span: 0.42 }, { min: 0.16, span: 0.44 }]
-      : [{ min: 0.13, span: 0.44 }, { min: 0.11, span: 0.4 }, { min: 0.12, span: 0.42 }]
+      ? [{ min: 0.15, span: 0.46 }, { min: 0.13, span: 0.42 }, { min: 0.14, span: 0.44 }]
+      : [{ min: 0.12, span: 0.44 }, { min: 0.1, span: 0.4 }, { min: 0.11, span: 0.42 }]
     : isLight
-      ? [{ min: 0.09, span: 0.28 }, { min: 0.08, span: 0.24 }, { min: 0.085, span: 0.26 }]
-      : [{ min: 0.05, span: 0.26 }, { min: 0.04, span: 0.22 }, { min: 0.045, span: 0.24 }];
+      ? [{ min: 0.02, span: 0.26 }, { min: 0.018, span: 0.22 }, { min: 0.02, span: 0.24 }]
+      : [{ min: 0.02, span: 0.26 }, { min: 0.018, span: 0.22 }, { min: 0.02, span: 0.24 }];
   const stop = (min: number, span: number) => {
     const alpha = min + (1 - i) * span;
     return alpha + (1 - alpha) * o;
   };
-  return { a: stop(defs[0].min, defs[0].span), b: stop(defs[1].min, defs[1].span), c: stop(defs[2].min, defs[2].span) };
+  return {
+    a: stop(defs[0].min, defs[0].span),
+    b: stop(defs[1].min, defs[1].span),
+    c: stop(defs[2].min, defs[2].span),
+    blurPx: Math.round(i * (material === 'mica' ? 12 : 42)),
+  };
 };
 
 const folderDisplayName = (path: string): string => {
@@ -954,6 +959,7 @@ const AppContent: React.FC = () => {
           ['--material-a' as any]: String(tints.a.toFixed(3)),
           ['--material-b' as any]: String(tints.b.toFixed(3)),
           ['--material-c' as any]: String(tints.c.toFixed(3)),
+          ['--mblur' as any]: `${tints.blurPx}px`,
         };
       })()
     : undefined;

@@ -52,13 +52,34 @@ const applyWindowMaterial = (material: WindowMaterial = 'solid') => {
     // A transparent window background lets the material show through the
     // userland content; solid reverts to the normal opaque shell.
     mainWindow.setBackgroundColor(material === 'solid' ? '#09090b' : '#00000000');
-    // DWM sometimes leaves the client area opaque until a repaint is forced,
-    // so schedule one now (otherwise the material only appears after the user
-    // interacts with the window, e.g. clicking an input).
+    // Fastest path: schedule a full repaint of the web contents.
     mainWindow.webContents.invalidate();
+    // DWM also needs the layered-window surface flushed, otherwise the freshly
+    // transparent client area stays opaque until the user interacts with the
+    // window (e.g. clicking an input). A hair-thin opacity toggle forces a
+    // layered-window update, then restore imperceptibly.
+    forceWindowRecompose();
   } catch {
     // Material is unsupported (e.g. Windows 10 without acrylic, or older OS).
   }
+};
+
+const forceWindowRecompose = () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const restore = mainWindow.getOpacity();
+  try {
+    mainWindow.setOpacity(restore === 1 ? 0.9999 : 1);
+    mainWindow.webContents.invalidate();
+  } catch {
+    // ignore
+  }
+  setTimeout(() => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setOpacity(restore);
+    } catch {
+      // ignore
+    }
+  }, 80);
 };
 
 const createWindow = (initialMaterial: WindowMaterial = 'solid') => {

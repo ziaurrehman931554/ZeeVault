@@ -82,13 +82,26 @@ button:disabled {
 }
 
 /* ---- Native window material modes ---------------------------------------
-   When Mica/Acrylic is active the shell keeps only a light tint overlay so the
-   DWM material (which the native title bar already shows) can render cleanly
-   behind the page. No full-window backdrop-filter: that double-frosted the
-   view, darkened it, made Mica look identical to Acrylic, and caused stale
-   compositing until a repaint was forced.
-   The tint alpha stops (--material-a/b/c) are computed by the renderer from
-   the material-intensity and backdrop-opacity settings and set inline. */
+   When Mica/Acrylic is active the shell shows a frost (backdrop-filter) plus a
+   light tint. The --mblur property is registered so the frost can animate,
+   which both looks like a clean reveal AND pumps composited frames to DWM so
+   the freshly-transparent window flushes immediately (no "click an input to
+   wake the theme up").
+   Tint alphas (--material-a/b/c) and the blur come from the renderer inline
+   styles driven by the material-intensity and background-opacity settings. */
+@property --mblur {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+.app-shell.material-mica,
+.app-shell.material-acrylic {
+  -webkit-backdrop-filter: blur(var(--mblur)) saturate(170%);
+  backdrop-filter: blur(var(--mblur)) saturate(170%);
+  transition: --mblur 0.55s ease;
+}
+
 .app-shell.material-mica {
   background:
     radial-gradient(circle at top left, rgba(140, 150, 165, 0.06), transparent 32rem),
