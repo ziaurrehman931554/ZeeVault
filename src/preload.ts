@@ -103,6 +103,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
 
+  getSettings: async () => {
+    try {
+      return await ipcRenderer.invoke('getSettings');
+    } catch {
+      return null;
+    }
+  },
+
+  setSettings: async (settings: unknown) => {
+    try {
+      return await ipcRenderer.invoke('setSettings', settings);
+    } catch {
+      return false;
+    }
+  },
+
   checkPath: async (folderPath: string) => {
     try {
       return await ipcRenderer.invoke('checkPath', folderPath);

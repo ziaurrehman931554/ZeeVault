@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { usePlayerStore } from '../stores/playerStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import VideoCard from './VideoCard';
 import { DecryptJob, FilterType, MetaFile, SortField, ThemeMode, VideoItem } from '../types/index';
 
@@ -21,6 +22,7 @@ interface VideoGalleryProps {
   onLockFolder: (folderPath: string) => void;
   onRemoveFolder: (folderPath: string) => void;
   onAddFolders: () => void;
+  onOpenSettings: () => void;
   onThemeToggle: () => void;
   onVideoDecrypt: (video: VideoItem) => void;
   onVideoPlay: (video: VideoItem) => void;
@@ -56,6 +58,7 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
   onLockFolder,
   onRemoveFolder,
   onAddFolders,
+  onOpenSettings,
   onThemeToggle,
   onVideoDecrypt,
   onVideoPlay,
@@ -195,6 +198,7 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
         </label>
 
         <div className="nav-actions">
+          <span className="user-greeting" title="Signed in user">Welcome, {useSettingsStore((s) => s.userName)}</span>
           <CircularProgress
             percent={collectiveProgress.percent}
             label={`${collectiveProgress.done}/${collectiveProgress.requested || 0}`}
@@ -212,6 +216,12 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
                 <path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
               </svg>
             )}
+          </button>
+          <button className="icon-button" onClick={onOpenSettings} type="button" title="Settings">
+            <svg viewBox="0 0 24 24" className="settings-icon" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h.01a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h.01a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.01a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" />
+            </svg>
           </button>
           <button className="logout-button" onClick={handleLogout} type="button">
             <svg viewBox="0 0 24 24" className="logout-icon" aria-hidden="true">

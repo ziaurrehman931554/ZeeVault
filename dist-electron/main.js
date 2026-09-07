@@ -245,6 +245,37 @@ ipcMain.handle('setStoredFolderPaths', async (_event, folderPaths) => {
         return false;
     }
 });
+ipcMain.handle('getSettings', async () => {
+    try {
+        const configPath = getConfigPath();
+        const data = await fs.readFile(configPath, 'utf-8');
+        const config = JSON.parse(data);
+        return config.settings || null;
+    }
+    catch {
+        return null;
+    }
+});
+ipcMain.handle('setSettings', async (_event, settings) => {
+    try {
+        const configPath = getConfigPath();
+        let config = {};
+        try {
+            const data = await fs.readFile(configPath, 'utf-8');
+            config = JSON.parse(data);
+        }
+        catch {
+            config = {};
+        }
+        config.settings = settings || {};
+        // Preserve the legacy single-path key the app still reads on restore.
+        await fs.writeFile(configPath, JSON.stringify(config), 'utf-8');
+        return true;
+    }
+    catch {
+        return false;
+    }
+});
 ipcMain.handle('checkPath', async (_event, folderPath) => {
     try {
         if (typeof folderPath !== 'string' || !folderPath)

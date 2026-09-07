@@ -45,6 +45,51 @@ export interface VideoItem {
 
 export type ThemeMode = 'dark' | 'light';
 
+export type AccentColor =
+  | 'sky'
+  | 'blue'
+  | 'green'
+  | 'emerald'
+  | 'purple'
+  | 'violet'
+  | 'pink'
+  | 'rose'
+  | 'amber'
+  | 'orange'
+  | 'teal'
+  | 'red';
+
+export type VideoCardSize = 'small' | 'medium' | 'large';
+
+export interface AppSettings {
+  userName: string;
+  theme: ThemeMode;
+  accentColor: AccentColor;
+  videoCardSize: VideoCardSize;
+}
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  userName: 'Guest',
+  theme: 'dark',
+  accentColor: 'sky',
+  videoCardSize: 'medium',
+};
+
+export const ACCENT_PRESETS: { key: AccentColor; label: string; dark: string; light: string }[] = [
+  { key: 'sky', label: 'Sky', dark: '#38bdf8', light: '#0284c7' },
+  { key: 'blue', label: 'Blue', dark: '#3b82f6', light: '#2563eb' },
+  { key: 'green', label: 'Green', dark: '#22c55e', light: '#16a34a' },
+  { key: 'emerald', label: 'Emerald', dark: '#10b981', light: '#059669' },
+  { key: 'teal', label: 'Teal', dark: '#2dd4bf', light: '#0d9488' },
+  { key: 'purple', label: 'Purple', dark: '#a855f7', light: '#7c3aed' },
+  { key: 'violet', label: 'Violet', dark: '#8b5cf6', light: '#6d28d9' },
+  { key: 'pink', label: 'Pink', dark: '#ec4899', light: '#db2777' },
+  { key: 'rose', label: 'Rose', dark: '#f43f5e', light: '#e11d48' },
+  { key: 'red', label: 'Red', dark: '#ef4444', light: '#dc2626' },
+  { key: 'amber', label: 'Amber', dark: '#f59e0b', light: '#d97706' },
+  { key: 'orange', label: 'Orange', dark: '#f97316', light: '#ea580c' },
+];
+
 export type DecryptStatus = 'idle' | 'decrypting' | 'ready' | 'error';
 
 export interface DecryptJob {
@@ -62,7 +107,7 @@ export interface NotificationItem {
 }
 
 export interface AppState {
-  currentScreen: 'login' | 'gallery' | 'player';
+  currentScreen: 'login' | 'gallery' | 'player' | 'settings';
   folderPaths: string[];
   passwords: Record<string, string>;
   metas: Record<string, MetaFile | null>;

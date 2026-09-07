@@ -4,6 +4,7 @@ import { useAppStore } from './stores/appStore';
 import { usePlayerStore } from './stores/playerStore';
 import LoginScreen from './components/LoginScreen';
 import VideoGallery from './components/VideoGallery';
+import SettingsScreen from './components/SettingsScreen';
 import VideoPlayer from './components/VideoPlayer';
 import MiniPlayer from './components/MiniPlayer';
 import LockScreen from './components/LockScreen';
@@ -16,6 +17,8 @@ import { CryptoService } from './services/cryptoService';
 import { MediaScanner } from './services/mediaScanner';
 import { createMseBlob } from './services/tsTransmuxer';
 import { decryptAllThumbnails, generateUnencryptedThumbnailFromBuffer } from './services/thumbnailManager';
+import { loadSettings, useSettingsStore } from './stores/settingsStore';
+import { ACCENT_PRESETS } from './types/index';
 
 const MAX_READY_CACHE = 20;
 
@@ -36,6 +39,43 @@ const AppContent: React.FC = () => {
   const { currentVideo, videoUrl, miniPlayer, setCurrentVideo, setIsDecrypting, setDecryptProgress, setVideoUrl } = usePlayerStore();
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [savedFolderPaths, setSavedFolderPaths] = useState<string[] | null>(null);
+
+  const settingsTheme = useSettingsStore((s) => s.theme);
+  const settingsAccent = useSettingsStore((s) => s.accentColor);
+  const settingsCardSize = useSettingsStore((s) => s.videoCardSize);
+  const setSettingsTheme = useSettingsStore((s) => s.setTheme);
+  const settingsHydrated = useSettingsStore((s) => s.hydrated);
+
+  // Hydrate persisted settings once.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const loaded = await loadSettings();
+      if (cancelled) return;
+      useSettingsStore.setState({ ...loaded, hydrated: true });
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Keep local theme in sync with persisted theme, and expose a setter that
+  // updates both state and the store.
+  useEffect(() => {
+    if (settingsHydrated) setTheme(settingsTheme);
+  }, [settingsTheme, settingsHydrated]);
+
+  // Apply accent color via CSS variables on the document root (inherits down).
+  useEffect(() => {
+    const preset = ACCENT_PRESETS.find((p) => p.key === settingsAccent);
+    if (!preset) return;
+    document.documentElement.style.setProperty('--accent-app-dark', preset.dark);
+    document.documentElement.style.setProperty('--accent-app-light', preset.light);
+  }, [settingsAccent]);
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    setSettingsTheme(next);
+  };
 
   useEffect(() => {
     // Browser mode: always show login, no persistent storage
@@ -97,6 +137,14 @@ const AppContent: React.FC = () => {
   const decryptJobsRef = useRef(decryptJobs);
   const readyOrderRef = useRef<string[]>([]);
   const unencryptedThumbsGeneratedRef = useRef(false);
+
+  const openSettings = useCallback(() => {
+    setCurrentScreen('settings');
+  }, [setCurrentScreen]);
+
+  const closeSettings = useCallback(() => {
+    setCurrentScreen('gallery');
+  }, [setCurrentScreen]);
 
   const updateDecryptJobs = useCallback(
     (updater: Record<string, DecryptJob> | ((jobs: Record<string, DecryptJob>) => Record<string, DecryptJob>)) => {
@@ -727,8 +775,6 @@ const AppContent: React.FC = () => {
     notify(clearedCount ? `Cleared ${clearedCount} from cache.` : 'No cached media to clear.', clearedCount ? 'success' : 'info');
   }, [notify, setVideoUrl, updateDecryptJobs]);
 
-  const toggleTheme = () => setTheme((mode) => (mode === 'dark' ? 'light' : 'dark'));
-
   const collectiveProgress = useMemo(() => {
     const jobs = Object.values(decryptJobs);
     const requested = jobs.length;
@@ -824,7 +870,7 @@ const AppContent: React.FC = () => {
   }, [pendingDecryptVideo, pendingUnlockFolder]);
 
   return (
-    <div className={`app-shell theme-${theme}`}>
+    <div className={`app-shell theme-${theme}`} data-accent={settingsAccent} data-cardsize={settingsCardSize}>
       <CustomScrollbar />
       <div className="ambient-shape shape-one" />
       <div className="ambient-shape shape-two" />
@@ -864,12 +910,27 @@ const AppContent: React.FC = () => {
           onLockFolder={handleLockFolder}
           onRemoveFolder={handleRemoveFolder}
           onAddFolders={handleAddFolders}
+          onOpenSettings={openSettings}
           onThemeToggle={toggleTheme}
           onVideoDecrypt={handleVideoDecrypt}
           onVideoPlay={handleVideoPlay}
           onVideoClear={clearVideoCache}
           onClearAllCache={handleClearAllCache}
           onViewImage={handleViewImage}
+        />
+      )}
+      {currentScreen === 'settings' && (
+        <SettingsScreen
+          folderPaths={folderPaths}
+          metas={metas}
+          passwords={passwords}
+          theme={theme}
+          onBack={closeSettings}
+          onUnlockFolder={handleUnlockFolder}
+          onLockFolder={handleLockFolder}
+          onRemoveFolder={handleRemoveFolder}
+          onAddFolders={handleAddFolders}
+          onNotify={notify}
         />
       )}
       {currentScreen === 'player' && <VideoPlayer videoUrl={videoUrl} currentVideo={currentVideo} resumeTime={miniPlayer?.currentTime} />}

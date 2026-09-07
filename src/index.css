@@ -44,11 +44,16 @@ button:disabled {
   --text: #f5f5f5;
   --muted: #a1a1aa;
   --border: rgba(255, 255, 255, 0.1);
-  --accent: #38bdf8;
+  --accent-deep: #bae6fd;
+  --accent-app-dark: #38bdf8;
+  --accent-app-light: #0284c7;
+  --accent: var(--accent-app-dark, #38bdf8);
   --accent-2: #e5e7eb;
   --danger: #fb7185;
   --success: #34d399;
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
+  --video-card-min: 260px;
+  --video-card-max: 320px;
   position: relative;
   width: 100%;
   min-height: 100vh;
@@ -67,7 +72,8 @@ button:disabled {
   --text: #101828;
   --muted: #64748b;
   --border: rgba(15, 23, 42, 0.12);
-  --accent: #0284c7;
+  --accent-deep: #0c4a6e;
+  --accent: var(--accent-app-light, #0284c7);
   --accent-2: #dff4ff;
   --danger: #e11d48;
   --success: #059669;
@@ -76,6 +82,10 @@ button:disabled {
     radial-gradient(circle at top left, rgba(125, 211, 252, 0.3), transparent 30rem),
     linear-gradient(135deg, #ffffff 0%, #eef9ff 50%, #f8fafc 100%);
 }
+
+/* Accent presets (--accent-<key>) resolved by JS on the root element.
+   AppShell reads --accent-app-dark/light, which the app overrides. */
+
 
 .ambient-shape {
   position: fixed;
@@ -224,7 +234,7 @@ button:disabled {
 .brand-mark span:first-child,
 .brand-lockup h1 span:first-child,
 .brand-lockup strong span:first-child {
-  background: linear-gradient(135deg, #ffffff, #38bdf8);
+  background: linear-gradient(135deg, #ffffff, var(--accent));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -233,7 +243,7 @@ button:disabled {
 .brand-mark span:last-child,
 .brand-lockup h1 span:last-child,
 .brand-lockup strong span:last-child {
-  background: linear-gradient(135deg, #38bdf8, #94a3b8);
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -885,9 +895,26 @@ button:disabled {
 
 .video-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 320px));
+  grid-template-columns: repeat(auto-fill, minmax(var(--video-card-min), var(--video-card-max)));
   gap: 24px;
   justify-content: space-between;
+}
+
+.app-shell[data-cardsize="small"],
+.app-shell[data-cardsize="medium"],
+.app-shell[data-cardsize="large"] {
+  --video-card-min: 210px;
+  --video-card-max: 250px;
+}
+
+.app-shell[data-cardsize="medium"] {
+  --video-card-min: 260px;
+  --video-card-max: 320px;
+}
+
+.app-shell[data-cardsize="large"] {
+  --video-card-min: 340px;
+  --video-card-max: 420px;
 }
 
 .video-card {
@@ -4404,4 +4431,328 @@ button:disabled {
 .api-settings-save:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* ---------- Settings page ---------- */
+
+.settings-page {
+  min-height: 100vh;
+  padding: 76px 28px 48px;
+  box-sizing: border-box;
+}
+
+.settings-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  max-width: 720px;
+  margin: 0 auto 20px;
+}
+
+.settings-header .eyebrow {
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.back-button.settings-back {
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.settings-body {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.settings-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 20px 22px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+.settings-section-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.settings-section-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.settings-section-head h3 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.settings-section-head p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  flex-wrap: wrap;
+}
+
+.settings-row + .settings-row {
+  border-top: 1px solid var(--border);
+}
+
+.settings-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.settings-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 240px;
+  justify-content: flex-end;
+}
+
+.settings-input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.settings-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.settings-btn {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s, border-color 0.15s;
+}
+
+.settings-btn.primary {
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000));
+  color: #fff;
+  border-color: transparent;
+}
+
+.settings-btn.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.settings-segmented {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+}
+
+.settings-seg-btn {
+  min-height: 32px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-seg-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.accent-picker {
+  display: grid;
+  grid-template-columns: repeat(6, 32px);
+  gap: 10px;
+}
+
+.accent-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+
+.accent-swatch:hover {
+  transform: scale(1.1);
+}
+
+.accent-swatch.active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--swatch) 45%, transparent);
+}
+
+.settings-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-empty {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.settings-folder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.settings-folder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  flex-wrap: wrap;
+}
+
+.settings-folder-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-folder-dot {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--muted);
+}
+
+.settings-folder-dot.is-unlocked {
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent);
+}
+
+.settings-folder-dot.is-locked {
+  background: var(--accent);
+}
+
+.settings-folder-name {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-folder-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.settings-chip.unlock:hover {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.settings-chip.lock:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.settings-chip.remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.user-greeting {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icon-button .settings-icon {
+  width: 20px;
+  height: 20px;
 }

@@ -104,6 +104,22 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
             return false;
         }
     },
+    getSettings: async () => {
+        try {
+            return await electron_1.ipcRenderer.invoke('getSettings');
+        }
+        catch {
+            return null;
+        }
+    },
+    setSettings: async (settings) => {
+        try {
+            return await electron_1.ipcRenderer.invoke('setSettings', settings);
+        }
+        catch {
+            return false;
+        }
+    },
     checkPath: async (folderPath) => {
         try {
             return await electron_1.ipcRenderer.invoke('checkPath', folderPath);
