@@ -64,7 +64,8 @@ export type VideoCardSize = 'small' | 'medium' | 'large';
 export interface AppSettings {
   userName: string;
   theme: ThemeMode;
-  accentColor: AccentColor;
+  accentColor: AccentColor | 'custom';
+  accentCustom: string;
   videoCardSize: VideoCardSize;
 }
 
@@ -72,6 +73,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   userName: 'Guest',
   theme: 'dark',
   accentColor: 'sky',
+  accentCustom: '#38bdf8',
   videoCardSize: 'medium',
 };
 

@@ -18,7 +18,7 @@ import { MediaScanner } from './services/mediaScanner';
 import { createMseBlob } from './services/tsTransmuxer';
 import { decryptAllThumbnails, generateUnencryptedThumbnailFromBuffer } from './services/thumbnailManager';
 import { loadSettings, useSettingsStore } from './stores/settingsStore';
-import { ACCENT_PRESETS } from './types/index';
+import { ACCENT_PRESETS, DEFAULT_SETTINGS } from './types/index';
 
 const MAX_READY_CACHE = 20;
 
@@ -42,6 +42,7 @@ const AppContent: React.FC = () => {
 
   const settingsTheme = useSettingsStore((s) => s.theme);
   const settingsAccent = useSettingsStore((s) => s.accentColor);
+  const settingsAccentCustom = useSettingsStore((s) => s.accentCustom);
   const settingsCardSize = useSettingsStore((s) => s.videoCardSize);
   const setSettingsTheme = useSettingsStore((s) => s.setTheme);
   const settingsHydrated = useSettingsStore((s) => s.hydrated);
@@ -65,11 +66,20 @@ const AppContent: React.FC = () => {
 
   // Apply accent color via CSS variables on the document root (inherits down).
   useEffect(() => {
-    const preset = ACCENT_PRESETS.find((p) => p.key === settingsAccent);
-    if (!preset) return;
-    document.documentElement.style.setProperty('--accent-app-dark', preset.dark);
-    document.documentElement.style.setProperty('--accent-app-light', preset.light);
-  }, [settingsAccent]);
+    let dark: string;
+    let light: string;
+    if (settingsAccent === 'custom') {
+      dark = settingsAccentCustom || DEFAULT_SETTINGS.accentCustom;
+      light = dark;
+    } else {
+      const preset = ACCENT_PRESETS.find((p) => p.key === settingsAccent);
+      if (!preset) return;
+      dark = preset.dark;
+      light = preset.light;
+    }
+    document.documentElement.style.setProperty('--accent-app-dark', dark);
+    document.documentElement.style.setProperty('--accent-app-light', light);
+  }, [settingsAccent, settingsAccentCustom]);
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';

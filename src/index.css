@@ -45,8 +45,6 @@ button:disabled {
   --muted: #a1a1aa;
   --border: rgba(255, 255, 255, 0.1);
   --accent-deep: #bae6fd;
-  --accent-app-dark: #38bdf8;
-  --accent-app-light: #0284c7;
   --accent: var(--accent-app-dark, #38bdf8);
   --accent-2: #e5e7eb;
   --danger: #fb7185;
@@ -83,8 +81,10 @@ button:disabled {
     linear-gradient(135deg, #ffffff 0%, #eef9ff 50%, #f8fafc 100%);
 }
 
-/* Accent presets (--accent-<key>) resolved by JS on the root element.
-   AppShell reads --accent-app-dark/light, which the app overrides. */
+/* Accent presets are applied by JS on the root element as
+   --accent-app-dark / --accent-app-light and inherit down through
+   --accent (they are intentionally NOT re-declared here, so the
+   inline root values override the sky fallbacks). */
 
 
 .ambient-shape {
@@ -217,7 +217,7 @@ button:disabled {
   width: 44px;
   height: 44px;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(56, 189, 248, 0.18));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), color-mix(in srgb, var(--accent) 18%, transparent));
   border: 1px solid var(--border);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
   font-weight: 900;
@@ -630,7 +630,8 @@ button:disabled {
 }
 
 .theme-icon,
-.logout-icon {
+.logout-icon,
+.settings-icon {
   width: 18px;
   height: 18px;
   fill: none;
@@ -919,7 +920,6 @@ button:disabled {
 
 .video-card {
   width: 100%;
-  max-width: 320px;
   overflow: hidden;
   border-radius: 18px;
   transform: translateZ(0);
@@ -3711,7 +3711,7 @@ button:disabled {
 
 .zoom-menu-item.active {
   color: var(--accent, #38bdf8);
-  background: rgba(56, 189, 248, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 @media (max-width: 560px) {
@@ -4078,7 +4078,7 @@ button:disabled {
 
 .subtitle-result-item.downloading {
   border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
-  background: rgba(56, 189, 248, 0.04);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
 .subtitle-result-info {
@@ -4109,7 +4109,7 @@ button:disabled {
   font-size: 11px;
   font-weight: 700;
   color: var(--accent);
-  background: rgba(56, 189, 248, 0.1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   padding: 1px 7px;
   border-radius: 6px;
 }
@@ -4171,8 +4171,8 @@ button:disabled {
 
 /* ===== Player Subtitle Button & Menu ===== */
 .custom-player .subtitle-btn.active {
-  background: rgba(56, 189, 248, 0.22) !important;
-  box-shadow: inset 0 0 0 2px rgba(56, 189, 248, 0.4);
+  background: color-mix(in srgb, var(--accent) 22%, transparent) !important;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .custom-player .subtitle-btn svg {
@@ -4259,7 +4259,7 @@ button:disabled {
 }
 
 .custom-player .subtitle-menu-search:hover {
-  background: rgba(56, 189, 248, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 /* Player subtitle indicator in top bar */
@@ -4269,8 +4269,8 @@ button:disabled {
   gap: 5px;
   padding: 3px 10px 3px 6px;
   border-radius: 8px;
-  background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
   color: var(--accent);
   font-size: 11px;
   font-weight: 600;
@@ -4615,9 +4615,15 @@ button:disabled {
   color: #fff;
 }
 
+.accent-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .accent-picker {
   display: grid;
-  grid-template-columns: repeat(6, 32px);
+  grid-template-columns: repeat(7, 32px);
   gap: 10px;
 }
 
@@ -4640,6 +4646,43 @@ button:disabled {
 .accent-swatch.active {
   border-color: var(--text);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--swatch) 45%, transparent);
+}
+
+.custom-swatch {
+  position: relative;
+  overflow: hidden;
+  border-style: dashed;
+  background: conic-gradient(
+    from 90deg,
+    #ff0000,
+    #ff8c00,
+    #ffff00,
+    #008000,
+    #0000ff,
+    #8b00ff,
+    #ff0000
+  );
+}
+
+.custom-color-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  padding: 0;
+  border: none;
+}
+
+.custom-hex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
 }
 
 .settings-add-btn {
@@ -4750,9 +4793,4 @@ button:disabled {
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.icon-button .settings-icon {
-  width: 20px;
-  height: 20px;
 }

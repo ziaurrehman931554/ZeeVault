@@ -33,8 +33,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onNotify,
 }) => {
   const {
-    userName, accentColor, videoCardSize,
-    setUserName, setTheme, setAccentColor, setVideoCardSize,
+    userName, accentColor, accentCustom, videoCardSize,
+    setUserName, setTheme, setAccentColor, setAccentCustom, setVideoCardSize,
   } = useSettingsStore();
 
   const [nameDraft, setNameDraft] = useState(userName);
@@ -54,6 +54,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const handleCardSize = (s: VideoCardSize) => {
     setVideoCardSize(s);
     onNotify(`Card size: ${s}`, 'info');
+  };
+
+  const handleCustomColor = (hex: string) => {
+    setAccentCustom(hex);
+    onNotify(`Accent color: ${hex}`, 'info');
   };
 
   const sectionTitle = (icon: React.ReactNode, title: string, desc: string) => (
@@ -139,29 +144,51 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
           <div className="settings-row">
             <span className="settings-label">Accent color</span>
-            <div className="accent-picker">
-              {ACCENT_PRESETS.map((preset) => (
-                <button
-                  key={preset.key}
-                  type="button"
-                  className={`accent-swatch ${accentColor === preset.key ? 'active' : ''}`}
-                  style={{
-                    background: `linear-gradient(135deg, ${preset.dark}, ${preset.light})`,
-                    ['--swatch' as any]: preset.dark,
-                  }}
-                  title={preset.label}
-                  onClick={() => {
-                    setAccentColor(preset.key);
-                    onNotify(`Accent color: ${preset.label}`, 'info');
-                  }}
+            <div className="accent-control">
+              <div className="accent-picker">
+                {ACCENT_PRESETS.map((preset) => (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    className={`accent-swatch ${accentColor === preset.key ? 'active' : ''}`}
+                    style={{
+                      background: `linear-gradient(135deg, ${preset.dark}, ${preset.light})`,
+                      ['--swatch' as any]: preset.dark,
+                    }}
+                    title={preset.label}
+                    onClick={() => {
+                      setAccentColor(preset.key);
+                      onNotify(`Accent color: ${preset.label}`, 'info');
+                    }}
+                  >
+                    {accentColor === preset.key && (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} width="14" height="14">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+                <label
+                  className={`accent-swatch custom-swatch ${accentColor === 'custom' ? 'active' : ''}`}
+                  title={`Custom color (${accentCustom})`}
+                  style={{ ['--swatch' as any]: accentCustom }}
                 >
-                  {accentColor === preset.key && (
+                  <input
+                    type="color"
+                    className="custom-color-input"
+                    value={accentCustom}
+                    onChange={(e) => handleCustomColor(e.target.value)}
+                  />
+                  {accentColor === 'custom' && (
                     <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} width="14" height="14">
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
                   )}
-                </button>
-              ))}
+                </label>
+              </div>
+              {accentColor === 'custom' && (
+                <span className="custom-hex">{accentCustom}</span>
+              )}
             </div>
           </div>
 
