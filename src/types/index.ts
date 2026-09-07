@@ -45,19 +45,7 @@ export interface VideoItem {
 
 export type ThemeMode = 'dark' | 'light';
 
-export type AccentColor =
-  | 'sky'
-  | 'blue'
-  | 'green'
-  | 'emerald'
-  | 'purple'
-  | 'violet'
-  | 'pink'
-  | 'rose'
-  | 'amber'
-  | 'orange'
-  | 'teal'
-  | 'red';
+export type AccentColor = 'sky' | 'emerald' | 'violet' | 'rose' | 'amber';
 
 export type VideoCardSize = 'small' | 'medium' | 'large';
 
@@ -67,6 +55,9 @@ export interface AppSettings {
   accentColor: AccentColor | 'custom';
   accentCustom: string;
   videoCardSize: VideoCardSize;
+  autoplay: boolean;
+  defaultSpeed: number;
+  autoPlayNext: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -75,21 +66,19 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accentColor: 'sky',
   accentCustom: '#38bdf8',
   videoCardSize: 'medium',
+  autoplay: true,
+  defaultSpeed: 1,
+  autoPlayNext: false,
 };
+
+export const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
 
 export const ACCENT_PRESETS: { key: AccentColor; label: string; dark: string; light: string }[] = [
   { key: 'sky', label: 'Sky', dark: '#38bdf8', light: '#0284c7' },
-  { key: 'blue', label: 'Blue', dark: '#3b82f6', light: '#2563eb' },
-  { key: 'green', label: 'Green', dark: '#22c55e', light: '#16a34a' },
-  { key: 'emerald', label: 'Emerald', dark: '#10b981', light: '#059669' },
-  { key: 'teal', label: 'Teal', dark: '#2dd4bf', light: '#0d9488' },
-  { key: 'purple', label: 'Purple', dark: '#a855f7', light: '#7c3aed' },
-  { key: 'violet', label: 'Violet', dark: '#8b5cf6', light: '#6d28d9' },
-  { key: 'pink', label: 'Pink', dark: '#ec4899', light: '#db2777' },
-  { key: 'rose', label: 'Rose', dark: '#f43f5e', light: '#e11d48' },
-  { key: 'red', label: 'Red', dark: '#ef4444', light: '#dc2626' },
-  { key: 'amber', label: 'Amber', dark: '#f59e0b', light: '#d97706' },
-  { key: 'orange', label: 'Orange', dark: '#f97316', light: '#ea580c' },
+  { key: 'emerald', label: 'Green', dark: '#10b981', light: '#059669' },
+  { key: 'violet', label: 'Purple', dark: '#8b5cf6', light: '#6d28d9' },
+  { key: 'rose', label: 'Red', dark: '#f43f5e', light: '#e11d48' },
+  { key: 'amber', label: 'Orange', dark: '#f59e0b', light: '#d97706' },
 ];
 
 export type DecryptStatus = 'idle' | 'decrypting' | 'ready' | 'error';

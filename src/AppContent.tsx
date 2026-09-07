@@ -72,8 +72,7 @@ const AppContent: React.FC = () => {
       dark = settingsAccentCustom || DEFAULT_SETTINGS.accentCustom;
       light = dark;
     } else {
-      const preset = ACCENT_PRESETS.find((p) => p.key === settingsAccent);
-      if (!preset) return;
+      const preset = ACCENT_PRESETS.find((p) => p.key === settingsAccent) ?? ACCENT_PRESETS[0];
       dark = preset.dark;
       light = preset.light;
     }
@@ -749,6 +748,32 @@ const AppContent: React.FC = () => {
     navigate(`/app/view/${encodeURIComponent(video.id)}`);
   }, [decryptJobs, decryptSingleVideo, playUnencryptedVideo, setCurrentVideo, setIsDecrypting, setVideoUrl, navigate]);
 
+  // Play the next video after `from` that is already decrypted / cached (or an
+  // unencrypted video, which streams on demand), so "auto play next" advances
+  // without re-decrypting already-cached content.
+  const handlePlayNext = useCallback((from: VideoItem): VideoItem | null => {
+    const all = useAppStore.getState().videos;
+    const idx = all.findIndex((v) => v.id === from.id);
+    if (idx === -1) return null;
+    for (let i = idx + 1; i < all.length; i++) {
+      const next = all[i];
+      const isVideo = next.mediaType === 'encrypted_video' || next.mediaType === 'unencrypted_video';
+      if (!isVideo) continue;
+      if (!next.encrypted) {
+        void playUnencryptedVideo(next);
+        return next;
+      }
+      const job = decryptJobs[next.id];
+      if (job?.url) {
+        setCurrentVideo(next);
+        setVideoUrl(job.url);
+        setIsDecrypting(false);
+        return next;
+      }
+    }
+    return null;
+  }, [decryptJobs, playUnencryptedVideo, setCurrentVideo, setVideoUrl, setIsDecrypting]);
+
   const handleViewImage = useCallback((video: VideoItem) => {
     const allImages = videos.filter(v =>
       v.mediaType === 'encrypted_image' || v.mediaType === 'unencrypted_image'
@@ -943,7 +968,17 @@ const AppContent: React.FC = () => {
           onNotify={notify}
         />
       )}
-      {currentScreen === 'player' && <VideoPlayer videoUrl={videoUrl} currentVideo={currentVideo} resumeTime={miniPlayer?.currentTime} />}
+      {currentScreen === 'player' && (
+        <VideoPlayer
+          videoUrl={videoUrl}
+          currentVideo={currentVideo}
+          resumeTime={miniPlayer?.currentTime}
+          autoplay={useSettingsStore.getState().autoplay}
+          defaultSpeed={useSettingsStore.getState().defaultSpeed}
+          autoPlayNext={useSettingsStore.getState().autoPlayNext}
+          onPlayNext={handlePlayNext}
+        />
+      )}
       {miniPlayer && currentScreen !== 'player' && <MiniPlayer data={miniPlayer} />}
       <input
         ref={addFoldersInputRef}

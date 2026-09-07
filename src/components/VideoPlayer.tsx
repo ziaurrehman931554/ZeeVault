@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { usePlayerStore } from '../stores/playerStore';
-import { VideoItem } from '../types/index';
+import { PLAYBACK_SPEEDS, VideoItem } from '../types/index';
 
 export const formatTime = (seconds: number): string => {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
@@ -13,21 +13,26 @@ export const formatTime = (seconds: number): string => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
-const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+const SPEEDS = PLAYBACK_SPEEDS;
 
 interface VideoPlayerProps {
   videoUrl: string | null;
   currentVideo: VideoItem | null;
   resumeTime?: number;
+  autoplay?: boolean;
+  defaultSpeed?: number;
+  autoPlayNext?: boolean;
+  onPlayNext?: (from: VideoItem) => VideoItem | null;
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resumeTime }) => {
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resumeTime, autoplay = true, defaultSpeed = 1, autoPlayNext = false, onPlayNext }) => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const centerControlsRef = useRef<HTMLDivElement>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userPlayRef = useRef(false);
+  const advanceRef = useRef(false);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,7 +43,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
     return saved ? parseFloat(saved) : 1;
   });
   const [isMuted, setIsMuted] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState(1);
+  const [playbackRate, setPlaybackRate] = useState(defaultSpeed);
   const [topCtrlVisible, setTopCtrlVisible] = useState(false);
   const [centerCtrlVisible, setCenterCtrlVisible] = useState(false);
   const [bottomCtrlVisible, setBottomCtrlVisible] = useState(false);
@@ -349,6 +354,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
     const onRateChange = () => { setPlaybackRate(el.playbackRate); };
     const onFullscreenChange = () => { setIsFullscreen(!!document.fullscreenElement); };
     const onError = () => { setIsLoading(false); };
+    const onEnded = () => {
+      setIsPlaying(false);
+      showAllControls();
+      if (autoPlayNext && onPlayNext && currentVideo) {
+        const next = onPlayNext(currentVideo);
+        if (next) {
+          advanceRef.current = true;
+          userPlayRef.current = true;
+          showStatusInfo('next', 'Playing next');
+        }
+      }
+    };
 
     el.addEventListener('timeupdate', onTimeUpdate);
     el.addEventListener('durationchange', onDurationChange);
@@ -360,6 +377,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
     el.addEventListener('volumechange', onVolumeChange);
     el.addEventListener('ratechange', onRateChange);
     el.addEventListener('error', onError);
+    el.addEventListener('ended', onEnded);
     document.addEventListener('fullscreenchange', onFullscreenChange);
 
     el.volume = volume;
@@ -376,24 +394,37 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
       el.removeEventListener('volumechange', onVolumeChange);
       el.removeEventListener('ratechange', onRateChange);
       el.removeEventListener('error', onError);
+      el.removeEventListener('ended', onEnded);
       document.removeEventListener('fullscreenchange', onFullscreenChange);
     };
-  }, [volume, isMuted, showAllControls, scheduleHideAll, videoUrl]);
+  }, [volume, isMuted, showAllControls, scheduleHideAll, videoUrl, autoPlayNext, onPlayNext, currentVideo, showStatusInfo, defaultSpeed]);
 
   useEffect(() => {
     if (videoUrl) {
       const video = videoRef.current;
       if (video) {
+        video.playbackRate = defaultSpeed;
+        const shouldAdvance = advanceRef.current;
+        advanceRef.current = false;
+        const startPlayback = () => {
+          if (autoplay || shouldAdvance) {
+            userPlayRef.current = true;
+            video.play().catch(() => undefined);
+          } else {
+            userPlayRef.current = false;
+            showAllControls();
+          }
+        };
         video.load();
         if (resumeTime && resumeTime > 0) {
           const onSeeked = () => {
             video.removeEventListener('seeked', onSeeked);
-            video.play().catch(() => undefined);
+            startPlayback();
           };
           video.addEventListener('seeked', onSeeked);
           video.currentTime = resumeTime;
         } else {
-          video.play().catch(() => undefined);
+          startPlayback();
         }
       }
       setCurrentTime(resumeTime || 0);
@@ -406,7 +437,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         controlsTimerRef.current = null;
       }
     }
-  }, [videoUrl]);
+  }, [videoUrl, defaultSpeed, autoplay, resumeTime, showAllControls]);
 
   useEffect(() => {
     if (!videoUrl) return;
@@ -487,7 +518,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         className="video-element"
         src={videoUrl || undefined}
         preload="auto"
-        autoPlay
         muted
         playsInline
         onClick={togglePlay}

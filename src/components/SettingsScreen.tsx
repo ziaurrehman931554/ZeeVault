@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
-import { ACCENT_PRESETS, MetaFile, ThemeMode, VideoCardSize } from '../types/index';
+import { ACCENT_PRESETS, MetaFile, PLAYBACK_SPEEDS, ThemeMode, VideoCardSize } from '../types/index';
 
 interface SettingsScreenProps {
   folderPaths: string[];
@@ -34,7 +34,9 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
 }) => {
   const {
     userName, accentColor, accentCustom, videoCardSize,
+    autoplay, defaultSpeed, autoPlayNext,
     setUserName, setTheme, setAccentColor, setAccentCustom, setVideoCardSize,
+    setAutoplay, setDefaultSpeed, setAutoPlayNext,
   } = useSettingsStore();
 
   const [nameDraft, setNameDraft] = useState(userName);
@@ -74,11 +76,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
   return (
     <div className="settings-page">
       <div className="settings-header">
-        <button type="button" className="back-button settings-back" onClick={onBack}>
+        <button type="button" className="back-button settings-back" onClick={onBack} aria-label="Back to gallery" title="Back to gallery">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="18" height="18">
             <polyline points="15 18 9 12 15 6" />
           </svg>
-          Back to Gallery
         </button>
         <div>
           <p className="eyebrow">ZeeVault</p>
@@ -203,6 +204,63 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   onClick={() => handleCardSize(s)}
                 >
                   {s[0].toUpperCase() + s.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Playback */}
+        <section className="settings-card">
+          {sectionTitle(
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="20" height="20">
+              <polygon points="6 4 20 12 6 20 6 4" />
+            </svg>,
+            'Playback',
+            'How videos behave in the player'
+          )}
+          <div className="settings-row">
+            <span className="settings-label">Autoplay</span>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={autoplay}
+                onChange={(e) => {
+                  setAutoplay(e.target.checked);
+                  onNotify(`Autoplay ${e.target.checked ? 'on' : 'off'}`, 'info');
+                }}
+              />
+              <span className="settings-toggle-track" />
+            </label>
+          </div>
+          <div className="settings-row">
+            <span className="settings-label">Auto play next</span>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={autoPlayNext}
+                onChange={(e) => {
+                  setAutoPlayNext(e.target.checked);
+                  onNotify(`Auto play next ${e.target.checked ? 'on' : 'off'}`, 'info');
+                }}
+              />
+              <span className="settings-toggle-track" />
+            </label>
+          </div>
+          <div className="settings-row">
+            <span className="settings-label">Default speed</span>
+            <div className="settings-segmented">
+              {PLAYBACK_SPEEDS.map((speed) => (
+                <button
+                  key={speed}
+                  type="button"
+                  className={`settings-seg-btn ${defaultSpeed === speed ? 'active' : ''}`}
+                  onClick={() => {
+                    setDefaultSpeed(speed);
+                    onNotify(`Default speed: ${speed}x`, 'info');
+                  }}
+                >
+                  {speed}x
                 </button>
               ))}
             </div>

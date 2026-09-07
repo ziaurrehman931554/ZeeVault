@@ -10,6 +10,9 @@ interface SettingsStore extends AppSettings {
   setAccentColor: (accentColor: AppSettings['accentColor']) => void;
   setAccentCustom: (accentCustom: string) => void;
   setVideoCardSize: (videoCardSize: VideoCardSize) => void;
+  setAutoplay: (autoplay: boolean) => void;
+  setDefaultSpeed: (defaultSpeed: number) => void;
+  setAutoPlayNext: (autoPlayNext: boolean) => void;
   resetSettings: () => void;
 }
 
@@ -29,6 +32,9 @@ const sanitizeSettings = (raw: any): AppSettings => {
   if (raw.videoCardSize === 'small' || raw.videoCardSize === 'medium' || raw.videoCardSize === 'large') {
     base.videoCardSize = raw.videoCardSize;
   }
+  if (raw.autoplay === true || raw.autoplay === false) base.autoplay = raw.autoplay;
+  if (typeof raw.defaultSpeed === 'number' && raw.defaultSpeed > 0) base.defaultSpeed = raw.defaultSpeed;
+  if (raw.autoPlayNext === true || raw.autoPlayNext === false) base.autoPlayNext = raw.autoPlayNext;
   return base;
 };
 
@@ -68,6 +74,19 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
   setVideoCardSize: (videoCardSize) => {
     set({ videoCardSize });
+    saveToDisk(get());
+  },
+  setAutoplay: (autoplay) => {
+    set({ autoplay });
+    saveToDisk(get());
+  },
+  setDefaultSpeed: (defaultSpeed) => {
+    if (!(defaultSpeed > 0)) return;
+    set({ defaultSpeed });
+    saveToDisk(get());
+  },
+  setAutoPlayNext: (autoPlayNext) => {
+    set({ autoPlayNext });
     saveToDisk(get());
   },
   resetSettings: () => {
