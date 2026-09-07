@@ -149,6 +149,16 @@ button:disabled {
   background: transparent;
 }
 
+/* The header and footer join the material too: they drop most of their solid
+   fill so the desktop sees through the glassy chip (they keep their own
+   backdrop blur from .glass-panel). */
+.app-shell.material-mica .topbar,
+.app-shell.material-acrylic .topbar,
+.app-shell.material-mica .footer,
+.app-shell.material-acrylic .footer {
+  background: color-mix(in srgb, var(--bg-soft) 46%, transparent);
+}
+
 /* Accent presets are applied by JS on the root element as
    --accent-app-dark / --accent-app-light and inherit down through
    --accent (they are intentionally NOT re-declared here, so the
