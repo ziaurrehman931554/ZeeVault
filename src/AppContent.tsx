@@ -78,6 +78,19 @@ const AppContent: React.FC = () => {
   const settingsBackdropOpacity = useSettingsStore((s) => s.backdropOpacity);
   const setSettingsTheme = useSettingsStore((s) => s.setTheme);
   const settingsHydrated = useSettingsStore((s) => s.hydrated);
+  const [windowMaximized, setWindowMaximized] = useState(false);
+
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api?.getWindowState) return;
+
+    void api.getWindowState().then((state: { maximized: boolean }) => {
+      setWindowMaximized(Boolean(state?.maximized));
+    }).catch(() => {});
+    return api.onWindowStateChanged?.((state: { maximized: boolean }) => {
+      setWindowMaximized(Boolean(state?.maximized));
+    });
+  }, []);
 
   // Hydrate persisted settings once.
   useEffect(() => {
@@ -116,6 +129,20 @@ const AppContent: React.FC = () => {
 
   const toggleTheme = () => {
     setSettingsTheme(settingsTheme === 'dark' ? 'light' : 'dark');
+  };
+
+  const minimizeWindow = () => {
+    void (window as any).electronAPI?.minimizeWindow?.();
+  };
+
+  const toggleMaximizeWindow = () => {
+    void (window as any).electronAPI?.toggleMaximizeWindow?.().then((maximized: boolean) => {
+      setWindowMaximized(Boolean(maximized));
+    }).catch(() => {});
+  };
+
+  const closeWindow = () => {
+    void (window as any).electronAPI?.closeWindow?.();
   };
 
   useEffect(() => {
@@ -966,13 +993,24 @@ const AppContent: React.FC = () => {
 
   return (
     <div
-      className={`app-shell theme-${settingsTheme}${settingsMaterial !== 'solid' ? ` material-${settingsMaterial}` : ''}`}
+      className={`app-shell theme-${settingsTheme}${settingsMaterial !== 'solid' ? ` material-${settingsMaterial}` : ''}${windowMaximized ? ' window-maximized' : ''}`}
       data-accent={settingsAccent}
       data-cardsize={settingsCardSize}
       style={shellStyle}
     >
       <CustomScrollbar />
       <div className="material-backdrop" />
+      <div className="window-controls" role="group" aria-label="Window controls">
+        <button className="window-control minimize-control" type="button" onClick={minimizeWindow} aria-label="Minimize" title="Minimize">
+          <span aria-hidden="true">&#8722;</span>
+        </button>
+        <button className="window-control maximize-control" type="button" onClick={toggleMaximizeWindow} aria-label={windowMaximized ? 'Restore window' : 'Maximize'} title={windowMaximized ? 'Restore window' : 'Maximize'}>
+          <span aria-hidden="true">{windowMaximized ? '-' : '+'}</span>
+        </button>
+        <button className="window-control close-control" type="button" onClick={closeWindow} aria-label="Close" title="Close">
+          <span aria-hidden="true">&#215;</span>
+        </button>
+      </div>
       <div className="ambient-shape shape-one" />
       <div className="ambient-shape shape-two" />
       <div className="ambient-shape shape-three" />

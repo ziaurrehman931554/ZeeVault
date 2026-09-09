@@ -128,6 +128,15 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
             return false;
         }
     },
+    minimizeWindow: async () => electron_1.ipcRenderer.invoke('minimizeWindow'),
+    toggleMaximizeWindow: async () => electron_1.ipcRenderer.invoke('toggleMaximizeWindow'),
+    getWindowState: async () => electron_1.ipcRenderer.invoke('getWindowState'),
+    closeWindow: async () => electron_1.ipcRenderer.invoke('closeWindow'),
+    onWindowStateChanged: (callback) => {
+        const listener = (_event, state) => callback(state);
+        electron_1.ipcRenderer.on('windowStateChanged', listener);
+        return () => electron_1.ipcRenderer.removeListener('windowStateChanged', listener);
+    },
     checkPath: async (folderPath) => {
         try {
             return await electron_1.ipcRenderer.invoke('checkPath', folderPath);

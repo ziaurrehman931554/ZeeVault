@@ -90,7 +90,7 @@ async function searchOpenSubtitles(query: string, language?: string): Promise<Su
       headers: {
         'Api-Key': apiKey,
         'Content-Type': 'application/json',
-        'User-Agent': 'ZeeVault v1.0.0',
+        'User-Agent': 'ZeeVault v1.1.0',
       },
     });
 
@@ -191,7 +191,7 @@ async function downloadFromOpenSubtitles(fileId: string): Promise<string | null>
       headers: {
         'Api-Key': apiKey,
         'Content-Type': 'application/json',
-        'User-Agent': 'ZeeVault v1.0.0',
+        'User-Agent': 'ZeeVault v1.1.0',
       },
       body: JSON.stringify({ file_id: parseInt(fileId.replace('os-', '')) }),
     });

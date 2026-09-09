@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, screen } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
@@ -8,6 +8,7 @@ const getConfigPath = () => {
     return path.join(app.getPath('userData'), 'zeevault-config.json');
 };
 let mainWindow = null;
+let currentWindowMaterial = 'solid';
 // Serialize config read-modify-write cycles so two IPC handlers can't stomp
 // each other's keys (e.g. folder paths being saved while a settings write is
 // in flight, which would silently drop the settings object).
@@ -37,27 +38,32 @@ const updateConfigFile = async (update) => {
     return result;
 };
 // The DWM backdrop material only repaints when SOMETHING changes on the
-// window (activation, resize, ...). invalidate()/setOpacity always-on-top
-// toggles repaint the web contents but never the OS-drawn material, which is
-// why the acrylic used to stay dormant until clicking an input. The reliable,
-// flash-free trigger is a 1px resize while rendering is paused (workaround
-// from electron#39959): DWM then re-composites the material without a flicker.
+// window (activation, resize, ...). invalidate() repaints web contents but
+// not the OS-drawn material, which is why acrylic could stay dormant until an
+// input received focus. A one-pixel native resize makes DWM composite the
+// backdrop immediately.
 const nudgeWindowRepaint = () => {
     if (!mainWindow || mainWindow.isDestroyed() || process.platform !== 'win32')
         return;
-    const [width, height] = mainWindow.getSize();
+    // Do not resize a user-maximized window: changing its bounds would restore
+    // it. The material is already re-applied above and a content invalidation is
+    // the non-disruptive option in that state.
+    if (mainWindow.isMaximized()) {
+        mainWindow.webContents.invalidate();
+        return;
+    }
+    const bounds = mainWindow.getBounds();
     try {
-        mainWindow.webContents.setFrameRate(0);
-        mainWindow.setSize(width, height + 1);
+        mainWindow.setBounds({ ...bounds, height: bounds.height + 1 });
     }
     catch {
         // ignore
+        return;
     }
     setTimeout(() => {
         try {
             if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.setSize(width, height);
-                mainWindow.webContents.setFrameRate(60);
+                mainWindow.setBounds(bounds);
                 mainWindow.webContents.invalidate();
             }
         }
@@ -69,6 +75,7 @@ const nudgeWindowRepaint = () => {
 const applyWindowMaterial = (material = 'solid') => {
     if (!mainWindow || process.platform !== 'win32')
         return;
+    currentWindowMaterial = material;
     try {
         const materialMap = {
             solid: 'none',
@@ -76,9 +83,10 @@ const applyWindowMaterial = (material = 'solid') => {
             acrylic: 'acrylic',
         };
         mainWindow.setBackgroundMaterial(materialMap[material]);
-        // A transparent window background lets the material show through the
-        // userland content; solid reverts to the normal opaque shell.
-        mainWindow.setBackgroundColor(material === 'solid' ? '#09090b' : '#00000000');
+        // Keep the native canvas transparent in every mode. The renderer draws
+        // the Solid background itself; this also leaves the clipped corner pixels
+        // transparent while the window is restored.
+        mainWindow.setBackgroundColor('#00000000');
         mainWindow.webContents.invalidate();
         // Force DWM to actually repaint the OS-drawn material now, so runtime
         // switches show immediately instead of waiting for an input event.
@@ -106,8 +114,12 @@ const createWindow = (initialMaterial = 'solid') => {
         height: 900,
         minWidth: 1024,
         minHeight: 600,
-        backgroundColor: initialMaterial === 'solid' ? '#09090b' : '#00000000',
-        frame: true,
+        backgroundColor: '#00000000',
+        // Windows only honors transparent window backgrounds on frameless
+        // BrowserWindows. Window controls are rendered by the app so they can
+        // match the material instead of using the standard title bar.
+        transparent: true,
+        frame: false,
         // Stay hidden until the material and transparency are in place, so the
         // very first frame the user sees is already composited (avoids DWM
         // latching onto an opaque first paint).
@@ -128,15 +140,11 @@ const createWindow = (initialMaterial = 'solid') => {
     const reveal = (forceMaterial) => {
         if (!mainWindow || mainWindow.isDestroyed())
             return;
+        if (!mainWindow.isVisible()) {
+            mainWindow.maximize();
+        }
         applyWindowMaterial(forceMaterial);
         if (!mainWindow.isVisible()) {
-            // Fill the work area via setBounds() instead of maximize(): a real
-            // WS_MAXIMIZE combined with background material is broken in Electron
-            // (electron#43196/#41824 — maximized material windows paint black/stale
-            // until an interaction). setBounds() gives the same full-window layout
-            // without tripping the DWM material bug.
-            const workArea = screen.getPrimaryDisplay().workArea;
-            mainWindow.setBounds(workArea);
             mainWindow.show();
             mainWindow.focus();
         }
@@ -158,9 +166,18 @@ const createWindow = (initialMaterial = 'solid') => {
       ::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
       html { scrollbar-width: none !important; }
     `);
+        mainWindow?.webContents.send('windowStateChanged', { maximized: mainWindow.isMaximized() });
         if (mainWindow && !mainWindow.isVisible())
             reveal(initialMaterial);
     });
+    const refreshMaterialAfterWindowStateChange = () => {
+        if (!mainWindow || mainWindow.isDestroyed())
+            return;
+        mainWindow.webContents.send('windowStateChanged', { maximized: mainWindow.isMaximized() });
+        setTimeout(() => applyWindowMaterial(currentWindowMaterial), 0);
+    };
+    mainWindow.on('maximize', refreshMaterialAfterWindowStateChange);
+    mainWindow.on('unmaximize', refreshMaterialAfterWindowStateChange);
     if (isDev) {
         mainWindow.webContents.openDevTools();
     }
@@ -195,6 +212,26 @@ app.on('activate', () => {
 });
 ipcMain.handle('setWindowMaterial', (_event, material) => {
     applyWindowMaterial(material === 'mica' || material === 'acrylic' ? material : 'solid');
+    return true;
+});
+ipcMain.handle('minimizeWindow', () => {
+    mainWindow?.minimize();
+    return true;
+});
+ipcMain.handle('toggleMaximizeWindow', () => {
+    if (!mainWindow || mainWindow.isDestroyed())
+        return false;
+    if (mainWindow.isMaximized())
+        mainWindow.unmaximize();
+    else
+        mainWindow.maximize();
+    return mainWindow.isMaximized();
+});
+ipcMain.handle('getWindowState', () => ({
+    maximized: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isMaximized()),
+}));
+ipcMain.handle('closeWindow', () => {
+    mainWindow?.close();
     return true;
 });
 // IPC Handlers

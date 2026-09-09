@@ -9,7 +9,7 @@
     <a href="https://ziaurrehman931554.github.io/ZeeVault/" target="_blank">
       <img src="https://img.shields.io/badge/🌐%20Web%20App-ZeeVault-blue?style=for-the-badge" alt="Web App">
     </a>
-    <a href="https://github.com/ziaurrehman931554/ZeeVault/releases/latest/download/ZeeVault-Setup-1.0.0.exe">
+    <a href="https://github.com/ziaurrehman931554/ZeeVault/releases/latest/download/ZeeVault-Setup-1.1.0.exe">
       <img src="https://img.shields.io/badge/⬇️%20Download%20Installer-Windows-success?style=for-the-badge" alt="Download Installer">
     </a>
   </p>
@@ -65,7 +65,7 @@ Visit **[https://ziaurrehman931554.github.io/ZeeVault/](https://ziaurrehman93155
 ### Option 2: Download the Desktop App (Windows)
 
 1. Download the latest installer from the [Releases page](https://github.com/ziaurrehman931554/ZeeVault/releases/latest) or click the badge above.
-2. Run `ZeeVault Setup 1.0.0.exe` and follow the installation wizard.
+2. Run `ZeeVault Setup 1.1.0.exe` and follow the installation wizard.
 3. Launch ZeeVault from the Start Menu or desktop shortcut.
 
 ---
@@ -178,7 +178,7 @@ Press the lock button to lock the app — your password is required to resume.
 | Asset | Link |
 |---|---|
 | **Web App** | [https://ziaurrehman931554.github.io/ZeeVault/](https://ziaurrehman931554.github.io/ZeeVault/) |
-| **Windows Installer** | [ZeeVault Setup 1.0.0.exe](https://github.com/ziaurrehman931554/ZeeVault/releases/latest/download/ZeeVault-Setup-1.0.0.exe) |
+| **Windows Installer** | [ZeeVault Setup 1.1.0.exe](https://github.com/ziaurrehman931554/ZeeVault/releases/latest/download/ZeeVault-Setup-1.1.0.exe) |
 | **Encryption Script** | [ZeeVault.ps1](https://github.com/ziaurrehman931554/ZeeVault/releases/latest/download/ZeeVault.ps1) |
 | **ZIP (portable)** | [ZeeVault-win32-x64.zip](https://github.com/ziaurrehman931554/ZeeVault/releases/latest/download/ZeeVault-win32-x64.zip) |
 

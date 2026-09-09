@@ -127,6 +127,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
 
+  minimizeWindow: async () => ipcRenderer.invoke('minimizeWindow'),
+
+  toggleMaximizeWindow: async () => ipcRenderer.invoke('toggleMaximizeWindow'),
+
+  getWindowState: async () => ipcRenderer.invoke('getWindowState'),
+
+  closeWindow: async () => ipcRenderer.invoke('closeWindow'),
+
+  onWindowStateChanged: (callback: (state: { maximized: boolean }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: { maximized: boolean }) => callback(state);
+    ipcRenderer.on('windowStateChanged', listener);
+    return () => ipcRenderer.removeListener('windowStateChanged', listener);
+  },
+
   checkPath: async (folderPath: string) => {
     try {
       return await ipcRenderer.invoke('checkPath', folderPath);
