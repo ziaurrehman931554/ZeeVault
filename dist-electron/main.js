@@ -83,9 +83,6 @@ const applyWindowMaterial = (material = 'solid') => {
             acrylic: 'acrylic',
         };
         mainWindow.setBackgroundMaterial(materialMap[material]);
-        // Keep the native canvas transparent in every mode. The renderer draws
-        // the Solid background itself; this also leaves the clipped corner pixels
-        // transparent while the window is restored.
         mainWindow.setBackgroundColor('#00000000');
         mainWindow.webContents.invalidate();
         // Force DWM to actually repaint the OS-drawn material now, so runtime
@@ -115,10 +112,11 @@ const createWindow = (initialMaterial = 'solid') => {
         minWidth: 1024,
         minHeight: 600,
         backgroundColor: '#00000000',
-        // Windows only honors transparent window backgrounds on frameless
-        // BrowserWindows. Window controls are rendered by the app so they can
-        // match the material instead of using the standard title bar.
-        transparent: true,
+        // Do NOT use transparent:true here. A layered window disables WS_THICKFRAME
+        // on Windows, which removes the native minimize/maximize animations
+        // (electron#39971). The Mica/Acrylic see-through comes from
+        // backgroundMaterial + a transparent CSS background, and frameless windows
+        // get the thick frame (and thus the animations + shadow) by default.
         frame: false,
         // Stay hidden until the material and transparency are in place, so the
         // very first frame the user sees is already composited (avoids DWM

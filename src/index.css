@@ -790,17 +790,20 @@ button:disabled {
 .topbar {
   position: fixed;
   top: 0;
-  left: 0;
+  /* Start the draggable region right after the traffic-light controls. If the
+     drag region overlapped them as a sibling, Electron would swallow their
+     hover and clicks; keeping them out of the drag area makes them plain
+     renderer buttons. */
+  left: 88px;
   right: 0;
   z-index: 30;
-  width: 100%;
+  width: auto;
   min-height: 60px;
   display: grid;
   grid-template-columns: auto minmax(220px, 620px) auto;
   align-items: center;
   gap: 20px;
-  /* Leave the left side clear for the app-rendered window controls. */
-  padding: 9px clamp(16px, 3vw, 34px) 9px 112px;
+  padding: 9px clamp(16px, 3vw, 34px) 9px clamp(10px, 1.2vw, 18px);
   border-width: 0 0 1px;
   -webkit-app-region: drag;
 }
@@ -852,7 +855,12 @@ button:disabled {
   transition: opacity 120ms ease;
 }
 
-.window-controls:hover .window-control span,
+.window-control span svg {
+  display: block;
+  width: 10px;
+  height: 10px;
+}
+
 .window-control:hover span,
 .window-control:focus-visible span {
   opacity: 1;

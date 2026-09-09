@@ -141,7 +141,7 @@ const AppContent: React.FC = () => {
     }).catch(() => {});
   };
 
-  const closeWindow = () => {
+const closeWindow = () => {
     void (window as any).electronAPI?.closeWindow?.();
   };
 
@@ -999,13 +999,29 @@ const AppContent: React.FC = () => {
       style={shellStyle}
     >
       <CustomScrollbar />
-      <div className="material-backdrop" />
+<div className="material-backdrop" />
       <div className="window-controls" role="group" aria-label="Window controls">
         <button className="window-control minimize-control" type="button" onClick={minimizeWindow} aria-label="Minimize" title="Minimize">
           <span aria-hidden="true">&#8722;</span>
         </button>
-        <button className="window-control maximize-control" type="button" onClick={toggleMaximizeWindow} aria-label={windowMaximized ? 'Restore window' : 'Maximize'} title={windowMaximized ? 'Restore window' : 'Maximize'}>
-          <span aria-hidden="true">{windowMaximized ? '-' : '+'}</span>
+<button className="window-control maximize-control" type="button" onClick={toggleMaximizeWindow} aria-label={windowMaximized ? 'Restore window' : 'Maximize'} title={windowMaximized ? 'Restore window' : 'Maximize'}>
+          <span aria-hidden="true">
+            {windowMaximized ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 14h6v6" />
+                <path d="M20 10h-6V4" />
+                <path d="M14 10l7-7" />
+                <path d="M10 14l-7 7" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 3h6v6" />
+                <path d="M9 21H3v-6" />
+                <path d="M21 3l-7 7" />
+                <path d="M3 21l7-7" />
+              </svg>
+            )}
+          </span>
         </button>
         <button className="window-control close-control" type="button" onClick={closeWindow} aria-label="Close" title="Close">
           <span aria-hidden="true">&#215;</span>
