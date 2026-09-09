@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';import path from 'path';
+import { app, BrowserWindow, dialog, ipcMain, Menu, screen } from 'electron';import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 
@@ -40,6 +40,34 @@ const updateConfigFile = async (update: (config: Record<string, unknown>) => voi
 
 export type WindowMaterial = 'solid' | 'mica' | 'acrylic';
 
+// The DWM backdrop material only repaints when SOMETHING changes on the
+// window (activation, resize, ...). invalidate()/setOpacity always-on-top
+// toggles repaint the web contents but never the OS-drawn material, which is
+// why the acrylic used to stay dormant until clicking an input. The reliable,
+// flash-free trigger is a 1px resize while rendering is paused (workaround
+// from electron#39959): DWM then re-composites the material without a flicker.
+const nudgeWindowRepaint = () => {
+  if (!mainWindow || mainWindow.isDestroyed() || process.platform !== 'win32') return;
+  const [width, height] = mainWindow.getSize();
+  try {
+    mainWindow.webContents.setFrameRate(0);
+    mainWindow.setSize(width, height + 1);
+  } catch {
+    // ignore
+  }
+  setTimeout(() => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setSize(width, height);
+        mainWindow.webContents.setFrameRate(60);
+        mainWindow.webContents.invalidate();
+      }
+    } catch {
+      // ignore
+    }
+  }, 50);
+};
+
 const applyWindowMaterial = (material: WindowMaterial = 'solid') => {
   if (!mainWindow || process.platform !== 'win32') return;
   try {
@@ -52,49 +80,28 @@ const applyWindowMaterial = (material: WindowMaterial = 'solid') => {
     // A transparent window background lets the material show through the
     // userland content; solid reverts to the normal opaque shell.
     mainWindow.setBackgroundColor(material === 'solid' ? '#09090b' : '#00000000');
-    // Fastest path: schedule a full repaint of the web contents.
     mainWindow.webContents.invalidate();
-    // DWM also needs the layered-window surface flushed, otherwise the freshly
-    // transparent client area stays opaque until the user interacts with the
-    // window (e.g. clicking an input). A hair-thin opacity toggle forces a
-    // layered-window update, then restore imperceptibly.
-    forceWindowRecompose();
+    // Force DWM to actually repaint the OS-drawn material now, so runtime
+    // switches show immediately instead of waiting for an input event.
+    nudgeWindowRepaint();
   } catch {
     // Material is unsupported (e.g. Windows 10 without acrylic, or older OS).
   }
 };
 
-const forceWindowRecompose = () => {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const restore = mainWindow.getOpacity();
-  const wasTopMost = mainWindow.isAlwaysOnTop();
-  try {
-    mainWindow.setOpacity(restore === 1 ? 0.9999 : 1);
-    mainWindow.webContents.invalidate();
-    if (!wasTopMost) {
-      // A window-manager-level topmost toggle forces DWM to fully re-layout and
-      // re-composite the window (stronger than opacity/invalidate alone), which
-      // is what actually flushes a stale layered-window surface on Win10/11.
-      mainWindow.setAlwaysOnTop(true, 'screen-saver');
-    }
-  } catch {
-    // ignore
-  }
-  setTimeout(() => {
-    try {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.setOpacity(restore);
-        if (!wasTopMost) mainWindow.setAlwaysOnTop(false);
-        mainWindow.webContents.invalidate();
-      }
-    } catch {
-      // ignore
-    }
-  }, 120);
-};
-
 const createWindow = (initialMaterial: WindowMaterial = 'solid') => {
   Menu.setApplicationMenu(null);
+
+  // Critical: backgroundMaterial MUST be set in the constructor. Electron's
+  // setBackgroundMaterial() silently no-ops when the window's *initial*
+  // material is none/undefined (electron#43345) — that is why the acrylic only
+  // appeared after clicking an input (an activation that forces a DWM repaint).
+  // The constructor option, combined with Electron's "material on initial
+  // activate" fix (electron#46657), paints the material on first show.
+  const materialOption = initialMaterial === 'solid'
+    ? {}
+    : { backgroundMaterial: initialMaterial };
+
   mainWindow = new BrowserWindow({
     title: 'ZeeVault',
     icon: path.join(__dirname, '../dist/ZeeVault.png'),
@@ -108,6 +115,7 @@ const createWindow = (initialMaterial: WindowMaterial = 'solid') => {
     // very first frame the user sees is already composited (avoids DWM
     // latching onto an opaque first paint).
     show: false,
+    ...materialOption,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -127,22 +135,26 @@ const createWindow = (initialMaterial: WindowMaterial = 'solid') => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     applyWindowMaterial(forceMaterial);
     if (!mainWindow.isVisible()) {
+      // Fill the work area via setBounds() instead of maximize(): a real
+      // WS_MAXIMIZE combined with background material is broken in Electron
+      // (electron#43196/#41824 — maximized material windows paint black/stale
+      // until an interaction). setBounds() gives the same full-window layout
+      // without tripping the DWM material bug.
+      const workArea = screen.getPrimaryDisplay().workArea;
+      mainWindow.setBounds(workArea);
       mainWindow.show();
       mainWindow.focus();
-      mainWindow.maximize();
     }
   };
 
   mainWindow.once('ready-to-show', () => {
     reveal(initialMaterial);
-    // DWM sometimes needs a few passes to flush the layered surface after the
-    // renderer re-applies the material during settings hydration; schedule
-    // gentle nudges so the acrylic never requires a click to "wake up".
-    for (const t of [450, 1300, 2800]) {
+    // The renderer re-applies the material during settings hydration; re-nudge
+    // a couple of times so the OS material is definitely painted by then.
+    for (const t of [450, 1400]) {
       setTimeout(() => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           applyWindowMaterial(initialMaterial);
-          forceWindowRecompose();
         }
       }, t);
     }
