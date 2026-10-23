@@ -57,6 +57,9 @@ export interface AppSettings {
   accentColor: AccentColor | 'custom';
   accentCustom: string;
   videoCardSize: VideoCardSize;
+  videoThumbnails: boolean;
+  encryptedVideoThumbnails: boolean;
+  photoThumbnails: boolean;
   autoplay: boolean;
   defaultSpeed: number;
   autoPlayNext: boolean;
@@ -75,6 +78,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accentColor: 'sky',
   accentCustom: '#38bdf8',
   videoCardSize: 'medium',
+  videoThumbnails: true,
+  encryptedVideoThumbnails: true,
+  photoThumbnails: true,
   autoplay: true,
   defaultSpeed: 1,
   autoPlayNext: false,

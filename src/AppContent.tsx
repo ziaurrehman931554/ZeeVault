@@ -73,6 +73,9 @@ const AppContent: React.FC = () => {
   const settingsAccent = useSettingsStore((s) => s.accentColor);
   const settingsAccentCustom = useSettingsStore((s) => s.accentCustom);
   const settingsCardSize = useSettingsStore((s) => s.videoCardSize);
+  const showVideoThumbnails = useSettingsStore((s) => s.videoThumbnails);
+  const showEncryptedVideoThumbnails = useSettingsStore((s) => s.encryptedVideoThumbnails);
+  const showPhotoThumbnails = useSettingsStore((s) => s.photoThumbnails);
   const settingsMaterial = useSettingsStore((s) => s.windowMaterial);
   const settingsMaterialIntensity = useSettingsStore((s) => s.materialIntensity);
   const settingsBackdropOpacity = useSettingsStore((s) => s.backdropOpacity);
@@ -203,6 +206,8 @@ const closeWindow = () => {
   const [pendingDecryptVideo, setPendingDecryptVideo] = useState<VideoItem | null>(null);
   const [pendingUnlockFolder, setPendingUnlockFolder] = useState<string | null>(null);
   const decryptJobsRef = useRef(decryptJobs);
+  const decryptingIdsRef = useRef(new Set<string>());
+  const prefetchPlaylistBufferRef = useRef<(video: VideoItem) => void>(() => {});
   const readyOrderRef = useRef<string[]>([]);
   const unencryptedThumbsGeneratedRef = useRef(false);
   const autoStartRef = useRef(true);
@@ -299,9 +304,27 @@ const closeWindow = () => {
       readyOrderRef.current = readyOrderRef.current.filter((name) => name !== videoId);
       readyOrderRef.current.push(videoId);
 
-      while (readyOrderRef.current.length > MAX_READY_CACHE) {
+      const queueState = usePlayerStore.getState();
+      const bufferStart = Math.max(0, queueState.playlistIndex - 1);
+      const bufferEnd = Math.min(queueState.playlist.length, queueState.playlistIndex === 0 ? 3 : queueState.playlistIndex + 2);
+      const queueWindow = queueState.playlistActive
+        ? new Set(queueState.playlist.slice(bufferStart, bufferEnd).map((item) => item.id))
+        : null;
+      if (queueWindow && !queueWindow.has(videoId)) {
+        if (readyJob._cleanup) readyJob._cleanup();
+        else if (readyJob.url) URL.revokeObjectURL(readyJob.url);
+        delete nextJobs[videoId];
+        readyOrderRef.current = readyOrderRef.current.filter((name) => name !== videoId);
+        return nextJobs;
+      }
+      while (readyOrderRef.current.length > (queueWindow ? 3 : MAX_READY_CACHE)) {
         const oldestName = readyOrderRef.current.shift();
         if (!oldestName) break;
+        if (queueWindow?.has(oldestName)) {
+          readyOrderRef.current.push(oldestName);
+          if (readyOrderRef.current.every((id) => queueWindow.has(id))) break;
+          continue;
+        }
         const oldestJob = nextJobs[oldestName];
         if (oldestJob?.url) {
           if (oldestJob._cleanup) oldestJob._cleanup();
@@ -337,9 +360,9 @@ const closeWindow = () => {
     }, [notify, setVideoUrl, updateDecryptJobs]
   );
 
-  const decryptSingleVideo = useCallback(async (video: VideoItem) => {
+  const decryptSingleVideo = useCallback(async (video: VideoItem, background = false) => {
     const existing = decryptJobsRef.current[video.id];
-    if (existing?.status === 'decrypting') return;
+    if (existing?.status === 'decrypting' || decryptingIdsRef.current.has(video.id)) return;
     if (existing?.status === 'ready') {
       notify('This media is already decrypted.', 'info');
       return;
@@ -348,21 +371,26 @@ const closeWindow = () => {
     const pwd = useAppStore.getState().passwords[video.folderPath] || null;
 
     if (video.encrypted && !pwd) {
+      if (background) return;
       setPendingDecryptVideo(video);
       setPendingUnlockFolder(null);
       setPasswordPromptVisible(true);
       return;
     }
 
-    setCurrentVideo(video);
-    setIsDecrypting(true);
-    setDecryptProgress(0);
+    decryptingIdsRef.current.add(video.id);
+    if (!background) {
+      setCurrentVideo(video);
+      setIsDecrypting(true);
+      setDecryptProgress(0);
+    }
     updateDecryptJobs((jobs) => ({
       ...jobs,
       [video.id]: { status: 'decrypting', progress: 0 },
     }));
-    notify(`Processing ${video.originalName}`, 'info');
+    if (!background) notify(`Processing ${video.originalName}`, 'info');
 
+    let decryptedUrl: string | null = null;
     try {
       const isImage = video.mediaType === 'encrypted_image' || video.mediaType === 'unencrypted_image';
 
@@ -372,10 +400,11 @@ const closeWindow = () => {
           video.filePath, null, mimeType, readVideoFileChunk,
           (done, total) => {
             const progress = Math.max(1, Math.round((done / total) * 100));
-            setDecryptProgress(progress);
+            if (!background || usePlayerStore.getState().currentVideo?.id === video.id) setDecryptProgress(progress);
             updateDecryptJobs((jobs) => ({ ...jobs, [video.id]: { status: 'decrypting', progress } }));
           }
         );
+        decryptedUrl = url;
         updateDecryptJobs((jobs) =>
           rememberReadyVideo(jobs, video.id, { status: 'ready', progress: 100, url })
         );
@@ -406,7 +435,7 @@ const closeWindow = () => {
           decryptedChunks.push(chunk);
           processedSize += chunk.length;
           const progress = Math.max(1, Math.round((processedSize / totalSize) * 100));
-          setDecryptProgress(progress);
+          if (!background || usePlayerStore.getState().currentVideo?.id === video.id) setDecryptProgress(progress);
           updateDecryptJobs((jobs) => ({
             ...jobs,
             [video.id]: { status: 'decrypting', progress },
@@ -424,6 +453,7 @@ const closeWindow = () => {
         if (!isImage && video.extension === 'ts') {
           try {
             const { url, cleanup } = await createMseBlob(decryptedBuffer);
+            decryptedUrl = url;
             updateDecryptJobs((jobs) =>
               rememberReadyVideo(jobs, video.id, { status: 'ready', progress: 100, url, _cleanup: cleanup })
             );
@@ -433,14 +463,18 @@ const closeWindow = () => {
               ...jobs,
               [video.id]: { status: 'error', progress: 0, error: msg },
             }));
-            setIsDecrypting(false);
-            setDecryptProgress(0);
+            const playerState = usePlayerStore.getState();
+            if (!playerState.playlistActive || (playerState.currentVideo?.id === video.id && playerState.playlist[playerState.playlistIndex]?.id === video.id)) {
+              setIsDecrypting(false);
+              setDecryptProgress(0);
+            }
             notify(`Could not play .ts file: ${msg}`, 'error');
             return;
           }
         } else {
           const mimeType = isImage ? `image/${video.extension}` : CryptoService.getMimeType(video.originalName);
           const url = CryptoService.bufferToBlob(decryptedBuffer, mimeType);
+          decryptedUrl = url;
           updateDecryptJobs((jobs) =>
             rememberReadyVideo(jobs, video.id, { status: 'ready', progress: 100, url })
           );
@@ -452,18 +486,25 @@ const closeWindow = () => {
           video.filePath, pwd!, mimeType, readVideoFileChunk,
           (done, total) => {
             const progress = Math.max(1, Math.round((done / total) * 100));
-            setDecryptProgress(progress);
+            if (!background || usePlayerStore.getState().currentVideo?.id === video.id) setDecryptProgress(progress);
             updateDecryptJobs((jobs) => ({ ...jobs, [video.id]: { status: 'decrypting', progress } }));
           }
         );
+        decryptedUrl = url;
         updateDecryptJobs((jobs) =>
           rememberReadyVideo(jobs, video.id, { status: 'ready', progress: 100, url, _cleanup: cleanup })
         );
       }
 
-      setIsDecrypting(false);
-      setDecryptProgress(100);
-      notify(`Ready: ${video.originalName}`, 'success');
+      const playerState = usePlayerStore.getState();
+      const isSelectedPlaylistItem = playerState.playlistActive
+        ? playerState.currentVideo?.id === video.id && playerState.playlist[playerState.playlistIndex]?.id === video.id
+        : true;
+      if (isSelectedPlaylistItem) {
+        setIsDecrypting(false);
+        setDecryptProgress(100);
+      }
+      if (!background) notify(`Ready: ${video.originalName}`, 'success');
 
       if (isImage) {
         const state = useAppStore.getState();
@@ -472,24 +513,32 @@ const closeWindow = () => {
         );
         const idx = allImages.findIndex(v => v.id === video.id);
         useAppStore.getState().setImageViewer({ items: allImages, currentIndex: Math.max(0, idx), visible: true });
-      } else {
-        const url = decryptJobsRef.current[video.id]?.url;
+      } else if (isSelectedPlaylistItem) {
+        const url = decryptedUrl || decryptJobsRef.current[video.id]?.url;
         if (url) {
           setVideoUrl(url);
+          setCurrentVideo(video);
+          setIsDecrypting(false);
           useAppStore.setState({ currentScreen: 'player' });
           navigate(`/app/view/${encodeURIComponent(video.id)}`);
+          window.setTimeout(() => prefetchPlaylistBufferRef.current(video), 0);
         }
       }
 
     } catch (error) {
       const message = error instanceof Error ? error.message : `Failed to process ${video.originalName}`;
-      setIsDecrypting(false);
-      setDecryptProgress(0);
+      const playerState = usePlayerStore.getState();
+      if (!playerState.playlistActive || (playerState.currentVideo?.id === video.id && playerState.playlist[playerState.playlistIndex]?.id === video.id)) {
+        setIsDecrypting(false);
+        setDecryptProgress(0);
+      }
       updateDecryptJobs((jobs) => ({
         ...jobs,
         [video.id]: { status: 'error', progress: 0, error: message },
       }));
       notify(message, 'error');
+    } finally {
+      decryptingIdsRef.current.delete(video.id);
     }
   }, [notify, readVideoFile, rememberReadyVideo, setCurrentVideo, setDecryptProgress, setIsDecrypting, updateDecryptJobs, setVideoUrl, navigate]);
 
@@ -745,7 +794,10 @@ const closeWindow = () => {
       setPasswordForFolder(unlockFolder, pwd);
 
       const currentVideos = useAppStore.getState().videos;
-      const updated = await decryptAllThumbnails(currentVideos, pwd, unlockFolder);
+      const updated = await decryptAllThumbnails(currentVideos, pwd, unlockFolder, {
+        encryptedVideos: showEncryptedVideoThumbnails,
+        photos: showPhotoThumbnails,
+      });
       setVideos(updated);
       setThumbnailsReady(true);
       notify(`Unlocked: ${folderDisplayName(unlockFolder)}`, 'success');
@@ -762,13 +814,46 @@ const closeWindow = () => {
 
     setPendingDecryptVideo(null);
     setPendingUnlockFolder(null);
-  }, [pendingDecryptVideo, pendingUnlockFolder, setPasswordForFolder, setVideos, setThumbnailsReady, notify, decryptSingleVideo]);
+  }, [pendingDecryptVideo, pendingUnlockFolder, setPasswordForFolder, setVideos, setThumbnailsReady, notify, decryptSingleVideo, showEncryptedVideoThumbnails, showPhotoThumbnails]);
 
   const handleVideoDecrypt = useCallback((video: VideoItem) => {
     void decryptSingleVideo(video);
   }, [decryptSingleVideo]);
 
+  const preparePlaylistBuffer = useCallback((current: VideoItem) => {
+    const player = usePlayerStore.getState();
+    if (!player.playlistActive) return;
+    const index = player.playlist.findIndex((item) => item.id === current.id);
+    if (index < 0) return;
+    const start = Math.max(0, index - 1);
+    const end = Math.min(player.playlist.length, index === 0 ? 3 : index + 2);
+    const windowItems = player.playlist.slice(start, end);
+    const allowed = new Set(windowItems.map((item) => item.id));
+    updateDecryptJobs((jobs) => {
+      const next = { ...jobs };
+      const allVideos = useAppStore.getState().videos;
+      Object.entries(next).forEach(([id, job]) => {
+        const item = allVideos.find((entry) => entry.id === id);
+        const isEncryptedVideo = item?.encrypted && (item.mediaType === 'encrypted_video' || item.mediaType === 'unencrypted_video');
+        if (!isEncryptedVideo || !job.url || allowed.has(id)) return;
+        if (job._cleanup) job._cleanup();
+        else URL.revokeObjectURL(job.url);
+        delete next[id];
+        readyOrderRef.current = readyOrderRef.current.filter((entry) => entry !== id);
+      });
+      return next;
+    });
+    windowItems.forEach((item) => {
+      if (!item.encrypted || item.id === current.id) return;
+      const job = decryptJobsRef.current[item.id];
+      if (job?.status === 'ready' || job?.status === 'decrypting') return;
+      void decryptSingleVideo(item, true);
+    });
+  }, [decryptSingleVideo, updateDecryptJobs]);
+  prefetchPlaylistBufferRef.current = preparePlaylistBuffer;
+
   const playUnencryptedVideo = useCallback(async (video: VideoItem) => {
+    const playlistMode = usePlayerStore.getState().playlistActive;
     const existing = decryptJobsRef.current[video.id];
     if (existing?.url) {
       setCurrentVideo(video);
@@ -779,6 +864,8 @@ const closeWindow = () => {
       return;
     }
 
+    setCurrentVideo(video);
+    setVideoUrl(null);
     setIsDecrypting(true);
     try {
       const mimeType = CryptoService.getMimeType(video.originalName);
@@ -793,25 +880,39 @@ const closeWindow = () => {
       updateDecryptJobs((jobs) =>
         rememberReadyVideo(jobs, video.id, { status: 'ready', progress: 100, url })
       );
-      setCurrentVideo(video);
-      setVideoUrl(url);
-      setIsDecrypting(false);
-      useAppStore.setState({ currentScreen: 'player' });
-      navigate(`/app/view/${encodeURIComponent(video.id)}`);
+      const player = usePlayerStore.getState();
+      if (!playlistMode || (player.playlistActive && player.currentVideo?.id === video.id && player.playlist[player.playlistIndex]?.id === video.id)) {
+        setVideoUrl(url);
+        setIsDecrypting(false);
+        useAppStore.setState({ currentScreen: 'player' });
+        navigate(`/app/view/${encodeURIComponent(video.id)}`);
+      }
     } catch (error) {
-      setIsDecrypting(false);
-      notify(`Failed to play: ${video.originalName}`, 'error');
+      const player = usePlayerStore.getState();
+      if (!playlistMode || player.currentVideo?.id === video.id) setIsDecrypting(false);
+      if (!playlistMode || player.currentVideo?.id === video.id) notify(`Failed to play: ${video.originalName}`, 'error');
     }
   }, [readVideoFileChunk, rememberReadyVideo, setCurrentVideo, setVideoUrl, setIsDecrypting, navigate, notify]);
 
   const handleVideoPlay = useCallback((video: VideoItem) => {
+    const player = usePlayerStore.getState();
+    if (player.playlistActive) {
+      const index = player.playlist.findIndex((item) => item.id === video.id);
+      if (index >= 0) player.setPlaylistIndex(index);
+      setCurrentVideo(video);
+      setVideoUrl(null);
+      setIsDecrypting(true);
+      useAppStore.setState({ currentScreen: 'player' });
+      navigate(`/app/view/${encodeURIComponent(video.id)}`);
+      preparePlaylistBuffer(video);
+    }
     if (!video.encrypted) {
       void playUnencryptedVideo(video);
       return;
     }
 
     // Encrypted content is only playable after it has been decrypted once.
-    const job = decryptJobs[video.id];
+    const job = decryptJobsRef.current[video.id];
     if (!job?.url) {
       void decryptSingleVideo(video);
       return;
@@ -821,12 +922,21 @@ const closeWindow = () => {
     setIsDecrypting(false);
     useAppStore.setState({ currentScreen: 'player' });
     navigate(`/app/view/${encodeURIComponent(video.id)}`);
-  }, [decryptJobs, decryptSingleVideo, playUnencryptedVideo, setCurrentVideo, setIsDecrypting, setVideoUrl, navigate]);
+  }, [decryptSingleVideo, playUnencryptedVideo, preparePlaylistBuffer, setCurrentVideo, setIsDecrypting, setVideoUrl, navigate]);
 
   // Play the next video after `from` that is already decrypted / cached (or an
   // unencrypted video, which streams on demand), so "auto play next" advances
   // without re-decrypting already-cached content.
   const handlePlayNext = useCallback((from: VideoItem): VideoItem | null => {
+    const player = usePlayerStore.getState();
+    if (player.playlistActive) {
+      const index = player.playlist.findIndex((v) => v.id === from.id);
+      const next = player.playlist[index + 1];
+      if (!next) return null;
+      player.setPlaylistIndex(index + 1);
+      void handleVideoPlay(next);
+      return next;
+    }
     const all = useAppStore.getState().videos;
     const idx = all.findIndex((v) => v.id === from.id);
     if (idx === -1) return null;
@@ -848,6 +958,47 @@ const closeWindow = () => {
     }
     return null;
   }, [decryptJobs, playUnencryptedVideo, setCurrentVideo, setVideoUrl, setIsDecrypting]);
+
+  const startPlaylist = useCallback((items: VideoItem[]) => {
+    if (!items.length) return;
+    usePlayerStore.getState().setPlaylist(items, 0);
+    handleVideoPlay(items[0]);
+  }, [handleVideoPlay]);
+
+  const handlePlayPrevious = useCallback((from: VideoItem): VideoItem | null => {
+    const player = usePlayerStore.getState();
+    if (!player.playlistActive) return null;
+    const index = player.playlist.findIndex((item) => item.id === from.id);
+    const previous = player.playlist[index - 1];
+    if (!previous) return null;
+    player.setPlaylistIndex(index - 1);
+    handleVideoPlay(previous);
+    return previous;
+  }, [handleVideoPlay]);
+
+  const handleChoosePlaylistItem = useCallback((video: VideoItem) => {
+    const player = usePlayerStore.getState();
+    const target = player.playlist.findIndex((item) => item.id === video.id);
+    if (target < 0) return;
+    if (target < player.playlistIndex) {
+      const next = [...player.playlist];
+      const [chosen] = next.splice(target, 1);
+      next.splice(player.playlistIndex, 0, chosen);
+      player.setPlaylist(next, player.playlistIndex);
+    } else {
+      player.setPlaylistIndex(target);
+    }
+    handleVideoPlay(video);
+  }, [handleVideoPlay]);
+
+  const handleQueueVideo = useCallback((video: VideoItem, placement: 'next' | 'last') => {
+    const player = usePlayerStore.getState();
+    if (!player.playlistActive || player.playlist.some((item) => item.id === video.id)) return;
+    const next = [...player.playlist];
+    const insertion = placement === 'next' ? Math.min(player.playlistIndex + 1, next.length) : next.length;
+    next.splice(insertion, 0, video);
+    player.setPlaylist(next, player.playlistIndex);
+  }, []);
 
   const handleViewImage = useCallback((video: VideoItem) => {
     const allImages = videos.filter(v =>
@@ -899,6 +1050,26 @@ const closeWindow = () => {
   }, [decryptJobs]);
 
   useEffect(() => {
+    unencryptedThumbsGeneratedRef.current = false;
+  }, [showVideoThumbnails, showPhotoThumbnails]);
+
+  useEffect(() => {
+    if (!showEncryptedVideoThumbnails && !showPhotoThumbnails) return;
+    let cancelled = false;
+    (async () => {
+      let current = useAppStore.getState().videos;
+      for (const [folderPath, password] of Object.entries(passwords)) {
+        current = await decryptAllThumbnails(current, password, folderPath, {
+          encryptedVideos: showEncryptedVideoThumbnails,
+          photos: showPhotoThumbnails,
+        });
+      }
+      if (!cancelled) setVideos(current);
+    })();
+    return () => { cancelled = true; };
+  }, [showEncryptedVideoThumbnails, showPhotoThumbnails, passwords, setVideos]);
+
+  useEffect(() => {
     return () => {
       Object.values(decryptJobsRef.current).forEach((job) => {
         if (job.url) {
@@ -911,7 +1082,9 @@ const closeWindow = () => {
 
   useEffect(() => {
     if (currentScreen !== 'gallery' || unencryptedThumbsGeneratedRef.current) return;
-    const unencrypted = videos.filter(v => !v.encrypted && !v.thumbnailUrl);
+    const unencrypted = videos.filter(v => !v.encrypted && !v.thumbnailUrl && (
+      v.mediaType === 'unencrypted_image' ? showPhotoThumbnails : showVideoThumbnails
+    ));
     if (unencrypted.length === 0) return;
     unencryptedThumbsGeneratedRef.current = true;
     (async () => {
@@ -928,7 +1101,7 @@ const closeWindow = () => {
       const updated = current.map(v => patch[v.id] ? { ...v, thumbnailUrl: patch[v.id] } : v);
       setVideos(updated);
     })();
-  }, [currentScreen, videos, readVideoFile, setVideos]);
+  }, [currentScreen, videos, readVideoFile, setVideos, showVideoThumbnails, showPhotoThumbnails]);
 
   useEffect(() => {
     const path = location.pathname.replace(/\/app\//, '');
@@ -1001,10 +1174,10 @@ const closeWindow = () => {
       <CustomScrollbar />
 <div className="material-backdrop" />
       <div className="window-controls" role="group" aria-label="Window controls">
-        <button className="window-control minimize-control" type="button" onClick={minimizeWindow} aria-label="Minimize" title="Minimize">
-          <span aria-hidden="true">&#8722;</span>
+        <button className="window-control close-control" type="button" onClick={closeWindow} aria-label="Close" title="Close">
+          <span aria-hidden="true">&#215;</span>
         </button>
-<button className="window-control maximize-control" type="button" onClick={toggleMaximizeWindow} aria-label={windowMaximized ? 'Restore window' : 'Maximize'} title={windowMaximized ? 'Restore window' : 'Maximize'}>
+        <button className="window-control maximize-control" type="button" onClick={toggleMaximizeWindow} aria-label={windowMaximized ? 'Restore window' : 'Maximize'} title={windowMaximized ? 'Restore window' : 'Maximize'}>
           <span aria-hidden="true">
             {windowMaximized ? (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -1023,8 +1196,8 @@ const closeWindow = () => {
             )}
           </span>
         </button>
-        <button className="window-control close-control" type="button" onClick={closeWindow} aria-label="Close" title="Close">
-          <span aria-hidden="true">&#215;</span>
+        <button className="window-control minimize-control" type="button" onClick={minimizeWindow} aria-label="Minimize" title="Minimize">
+          <span aria-hidden="true">&#8722;</span>
         </button>
       </div>
       <div className="ambient-shape shape-one" />
@@ -1060,6 +1233,7 @@ const closeWindow = () => {
           decryptJobs={decryptJobs}
           collectiveProgress={collectiveProgress}
           theme={settingsTheme}
+          showThemeToggle={settingsMaterial === 'solid'}
           folderPaths={folderPaths}
           metas={metas}
           passwords={passwords}
@@ -1074,6 +1248,9 @@ const closeWindow = () => {
           onVideoClear={clearVideoCache}
           onClearAllCache={handleClearAllCache}
           onViewImage={handleViewImage}
+          onStartPlaylist={startPlaylist}
+          playlistMiniMode={Boolean(miniPlayer && usePlayerStore.getState().playlistActive)}
+          onQueueVideo={handleQueueVideo}
         />
       )}
       {currentScreen === 'settings' && (
@@ -1098,10 +1275,13 @@ const closeWindow = () => {
               ? miniPlayer?.currentTime
               : undefined
           }
-          autoplay={useSettingsStore.getState().autoplay}
+          autoplay={usePlayerStore.getState().playlistActive || useSettingsStore.getState().autoplay}
           defaultSpeed={useSettingsStore.getState().defaultSpeed}
           autoPlayNext={useSettingsStore.getState().autoPlayNext}
           onPlayNext={handlePlayNext}
+          onPlayPrevious={handlePlayPrevious}
+          onChoosePlaylistItem={handleChoosePlaylistItem}
+          decryptJobs={decryptJobs}
         />
       )}
       {miniPlayer && currentScreen !== 'player' && <MiniPlayer data={miniPlayer} />}

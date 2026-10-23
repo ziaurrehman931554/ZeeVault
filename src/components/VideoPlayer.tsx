@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { usePlayerStore } from '../stores/playerStore';
-import { PLAYBACK_SPEEDS, VideoItem } from '../types/index';
+import { DecryptJob, PLAYBACK_SPEEDS, VideoItem } from '../types/index';
 
 export const formatTime = (seconds: number): string => {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
@@ -23,9 +23,12 @@ interface VideoPlayerProps {
   defaultSpeed?: number;
   autoPlayNext?: boolean;
   onPlayNext?: (from: VideoItem) => VideoItem | null;
+  onPlayPrevious?: (from: VideoItem) => VideoItem | null;
+  onChoosePlaylistItem?: (video: VideoItem) => void;
+  decryptJobs?: Record<string, DecryptJob>;
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resumeTime, autoplay = true, defaultSpeed = 1, autoPlayNext = false, onPlayNext }) => {
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resumeTime, autoplay = true, defaultSpeed = 1, autoPlayNext = false, onPlayNext, onPlayPrevious, onChoosePlaylistItem, decryptJobs = {} }) => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -43,6 +46,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
     return saved ? parseFloat(saved) : 1;
   });
   const [isMuted, setIsMuted] = useState(false);
+  const [showPlaylist, setShowPlaylist] = useState(false);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const { playlist, playlistIndex, playlistActive } = usePlayerStore();
   const [playbackRate, setPlaybackRate] = useState(defaultSpeed);
   const [topCtrlVisible, setTopCtrlVisible] = useState(false);
   const [centerCtrlVisible, setCenterCtrlVisible] = useState(false);
@@ -76,6 +82,31 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferedProgress = duration > 0 ? (buffered / duration) * 100 : 0;
+  const currentDecryptJob = currentVideo ? decryptJobs[currentVideo.id] : undefined;
+  const isDecryptingCurrent = currentDecryptJob?.status === 'decrypting';
+  const playlistPreparing = Boolean(playlistActive && currentVideo && !videoUrl);
+  const playlistLoading = Boolean(playlistActive && (playlistPreparing || isLoading));
+
+  useEffect(() => {
+    if (!videoUrl) {
+      const element = videoRef.current;
+      if (element) {
+        element.pause();
+        element.removeAttribute('src');
+        element.load();
+      }
+      setIsPlaying(false);
+      setIsLoading(Boolean(currentVideo));
+      setCurrentTime(0);
+      setDuration(0);
+      if (currentVideo) {
+        setTopCtrlVisible(true);
+        setCenterCtrlVisible(true);
+        setBottomCtrlVisible(true);
+        setShowThinSeek(false);
+      }
+    }
+  }, [videoUrl, currentVideo?.id]);
 
   const activeTrack = useMemo(() => {
     if (!activeTrackId || !enabled) return null;
@@ -363,7 +394,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
     const onEnded = () => {
       setIsPlaying(false);
       showAllControls();
-      if (autoPlayNext && onPlayNext && currentVideo) {
+      if ((autoPlayNext || usePlayerStore.getState().playlistActive) && onPlayNext && currentVideo) {
         const next = onPlayNext(currentVideo);
         if (next) {
           advanceRef.current = true;
@@ -406,14 +437,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
   }, [volume, isMuted, showAllControls, scheduleHideAll, videoUrl, autoPlayNext, onPlayNext, currentVideo, showStatusInfo, defaultSpeed]);
 
   useEffect(() => {
+    let cancelled = false;
     if (videoUrl) {
       const video = videoRef.current;
       if (video) {
+        video.pause();
         video.defaultPlaybackRate = defaultSpeed;
         video.playbackRate = defaultSpeed;
         const shouldAdvance = advanceRef.current;
         advanceRef.current = false;
         const startPlayback = () => {
+          if (cancelled) return;
           video.playbackRate = defaultSpeed;
           if (autoplay || shouldAdvance) {
             userPlayRef.current = true;
@@ -425,14 +459,25 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         };
         video.load();
         if (resumeTime && resumeTime > 0) {
-          const onSeeked = () => {
-            video.removeEventListener('seeked', onSeeked);
-            startPlayback();
+          const restorePosition = () => {
+            if (cancelled) return;
+            video.removeEventListener('loadedmetadata', restorePosition);
+            const onSeeked = () => {
+              video.removeEventListener('seeked', onSeeked);
+              startPlayback();
+            };
+            video.addEventListener('seeked', onSeeked);
+            video.currentTime = Math.min(resumeTime, video.duration || resumeTime);
           };
-          video.addEventListener('seeked', onSeeked);
-          video.currentTime = resumeTime;
+          if (video.readyState >= 1) restorePosition();
+          else video.addEventListener('loadedmetadata', restorePosition, { once: true });
         } else {
-          startPlayback();
+          if (autoplay || shouldAdvance) {
+            if (video.readyState >= 3) startPlayback();
+            else video.addEventListener('canplay', startPlayback, { once: true });
+          } else {
+            startPlayback();
+          }
         }
       }
       setCurrentTime(resumeTime || 0);
@@ -445,6 +490,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         controlsTimerRef.current = null;
       }
     }
+    return () => { cancelled = true; };
   }, [videoUrl, defaultSpeed, autoplay, resumeTime, showAllControls]);
 
   useEffect(() => {
@@ -471,11 +517,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         togglePlay();
       }
       if (event.key === 'Escape') {
+        if (showPlaylist) { event.preventDefault(); setShowPlaylist(false); return; }
         if (showSubtitleMenu) { setShowSubtitleMenu(false); return; }
         if (showSettings) { setShowSettings(false); return; }
         if (showVolumeSlider) { setShowVolumeSlider(false); return; }
         if (document.fullscreenElement) { document.exitFullscreen(); return; }
         closePlayer();
+      }
+      if (event.ctrlKey && playlistActive && (event.key === 'ArrowRight' || event.key === 'ArrowLeft')) {
+        event.preventDefault();
+        if (event.key === 'ArrowRight' && currentVideo) onPlayNext?.(currentVideo);
+        if (event.key === 'ArrowLeft' && currentVideo) onPlayPrevious?.(currentVideo);
+        return;
       }
       if (event.key === 'ArrowLeft') { event.preventDefault(); skip(-10); }
       if (event.key === 'ArrowRight') { event.preventDefault(); skip(10); }
@@ -490,7 +543,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [togglePlay, skip, toggleMute, toggleFullscreen, toggleSubtitles, playbackRate, handleSpeedChange, handleVolumeChange, volume, closePlayer, showSettings, showSubtitleMenu, showVolumeSlider]);
+  }, [togglePlay, skip, toggleMute, toggleFullscreen, toggleSubtitles, playbackRate, handleSpeedChange, handleVolumeChange, volume, closePlayer, showSettings, showSubtitleMenu, showVolumeSlider, showPlaylist, playlistActive, currentVideo, onPlayNext, onPlayPrevious]);
 
   const volumeIcon = useMemo(() => {
     if (isMuted) {
@@ -542,9 +595,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         ))}
       </video>
 
-      {isLoading && (
-        <div className="loading-overlay">
-          <div className="loading-spinner" />
+      {isLoading && !playlistActive && (
+        <div className={`loading-overlay player-preparing${!videoUrl ? ' no-source' : ''}`}>
+          {!videoUrl && currentVideo?.thumbnailUrl && <img className="player-preparing-thumb" src={currentVideo.thumbnailUrl} alt="" />}
+          {!videoUrl && <div className="player-preparing-shade" />}
+          <div className="player-preparing-content"><div className="loading-spinner" /><strong>{currentVideo?.originalName}</strong><span>{isDecryptingCurrent ? `Decrypting · ${currentDecryptJob?.progress ?? 0}%` : 'Preparing video…'}</span></div>
         </div>
       )}
 
@@ -589,6 +644,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
                 <svg viewBox="0 0 24 24" fill="currentColor">{volumeIcon}</svg>
               </button>
             </div>
+            {playlistActive && <button className={`ctrl-btn playlist-toggle${showPlaylist ? ' active' : ''}`} onClick={() => setShowPlaylist(v => !v)} title="Playlist" aria-label="Open playlist">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 6h12M9 12h12M9 18h8" /><circle cx="4" cy="6" r="1" fill="currentColor" stroke="none" /><circle cx="4" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="4" cy="18" r="1" fill="currentColor" stroke="none" />
+              </svg>
+            </button>}
             <button className="ctrl-btn" onClick={togglePiP} title="Picture in Picture">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <rect x="2" y="4" width="20" height="16" rx="2" />
@@ -599,14 +659,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         </div>
 
         <div className={`center-controls${centerCtrlVisible ? ' visible' : ''}`} ref={centerControlsRef} onClick={(e) => e.stopPropagation()}>
+          {playlistActive && <button className="ctrl-btn ctrl-btn-lg playlist-track-btn" onClick={() => currentVideo && onPlayPrevious?.(currentVideo)} disabled={playlistIndex <= 0} title="Previous video" aria-label="Previous video">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM19 5v14L9 12z" /></svg>
+          </button>}
           <button className="ctrl-btn ctrl-btn-lg" onClick={() => skip(-10)} title="Backward 10s">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M12.5 8c-2.65 0-4.05.99-5.5 2.17L4.5 8v6h6l-2.67-2.22C7.83 10.22 9.15 9.5 11 9.5c2.54 0 4.42 1.58 5.5 3.5l1.5-.75C16.5 9.75 14.15 8 12.5 8z" />
             </svg>
             <span className="skip-label">10</span>
           </button>
-          <button className="ctrl-btn ctrl-btn-play" onClick={togglePlay} title={isPlaying ? 'Pause' : 'Play'}>
-            {isPlaying ? (
+          <button className={`ctrl-btn ctrl-btn-play${playlistLoading ? ' is-preparing' : ''}`} onClick={togglePlay} title={playlistLoading ? 'Preparing video' : isPlaying ? 'Pause' : 'Play'} disabled={playlistLoading}>
+            {playlistLoading ? <span className="loading-spinner play-button-spinner" /> : isPlaying ? (
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <rect x="6" y="4" width="4" height="16" rx="1" />
                 <rect x="14" y="4" width="4" height="16" rx="1" />
@@ -623,6 +686,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
             </svg>
             <span className="skip-label">10</span>
           </button>
+          {playlistActive && <button className="ctrl-btn ctrl-btn-lg playlist-track-btn" onClick={() => currentVideo && onPlayNext?.(currentVideo)} disabled={playlistIndex >= playlist.length - 1} title="Next video" aria-label="Next video">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM5 5v14l10-7z" /></svg>
+          </button>}
         </div>
 
         <div className={`bottom-bar${bottomCtrlVisible ? ' visible' : ''}`} onClick={(e) => e.stopPropagation()}>
@@ -733,6 +799,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
         </div>
       </div>
 
+      {showPlaylist && playlistActive && <aside className="player-playlist" onClick={(e) => e.stopPropagation()}>
+        <header><strong>Playlist</strong><button className="ctrl-btn" onClick={() => setShowPlaylist(false)} aria-label="Close playlist">×</button></header>
+        <div className="playlist-history"><strong>History</strong>{playlist.slice(0, playlistIndex).map((item) => <PlaylistRow key={item.id} item={item} decryptJob={decryptJobs[item.id]} draggingId={draggingId} setDraggingId={setDraggingId} currentVideoId={currentVideo?.id} onChoose={onChoosePlaylistItem} />)}</div>
+        <div className="playlist-now"><strong>Playing now</strong>{currentVideo && <PlaylistRow item={currentVideo} decryptJob={decryptJobs[currentVideo.id]} draggingId={draggingId} setDraggingId={setDraggingId} currentVideoId={currentVideo.id} onChoose={onChoosePlaylistItem} />}</div>
+        <div className="playlist-up-next"><strong>Playing next</strong>{playlist.slice(playlistIndex + 1).map((item) => <PlaylistRow key={item.id} item={item} decryptJob={decryptJobs[item.id]} draggingId={draggingId} setDraggingId={setDraggingId} currentVideoId={currentVideo?.id} onChoose={onChoosePlaylistItem} />)}</div>
+      </aside>}
+
       {statusInfo && (
         <div className="status-indicator" key={statusInfo.key}>
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
@@ -758,6 +831,57 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videoUrl, currentVideo, resum
       </div>
     </div>
   );
+};
+
+const PlaylistRow: React.FC<{
+  item: VideoItem;
+  decryptJob?: DecryptJob;
+  draggingId: string | null;
+  setDraggingId: (id: string | null) => void;
+  currentVideoId?: string;
+  onChoose?: (video: VideoItem) => void;
+}> = ({ item, decryptJob, draggingId, setDraggingId, currentVideoId, onChoose }) => {
+  const setPlaylist = usePlayerStore((s) => s.setPlaylist);
+  const playlist = usePlayerStore((s) => s.playlist);
+  const isDecrypted = !item.encrypted || decryptJob?.status === 'ready';
+  const isDecrypting = decryptJob?.status === 'decrypting';
+  const ringCircumference = 2 * Math.PI * 8;
+  const ringProgress = Math.max(0, Math.min(100, decryptJob?.progress ?? 0));
+  const reorder = (targetId: string) => {
+    if (!draggingId || draggingId === targetId) return;
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-playlist-id]'));
+    const before = new Map(rows.map((row) => [row.dataset.playlistId!, row.getBoundingClientRect()]));
+    const next = [...playlist];
+    const from = next.findIndex((entry) => entry.id === draggingId);
+    const to = next.findIndex((entry) => entry.id === targetId);
+    if (from < 0 || to < 0) return;
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setPlaylist(next, next.findIndex((entry) => entry.id === currentVideoId));
+    requestAnimationFrame(() => {
+      rows.forEach((row) => {
+        const old = before.get(row.dataset.playlistId || '');
+        if (!old) return;
+        const rect = row.getBoundingClientRect();
+        const dx = old.left - rect.left;
+        const dy = old.top - rect.top;
+        if (!dx && !dy) return;
+        row.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }], { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      });
+    });
+  };
+  return <div data-playlist-id={item.id} draggable className={`player-playlist-item${item.id === currentVideoId ? ' current' : ''}${draggingId === item.id ? ' dragging' : ''}`}
+    onClick={() => onChoose?.(item)}
+    onDragStart={(event) => { setDraggingId(item.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', item.id); }}
+    onDragEnd={() => setDraggingId(null)} onDragOver={(event) => event.preventDefault()}
+    onDrop={(event) => { event.preventDefault(); const source = event.dataTransfer.getData('text/plain') || draggingId; if (source) { setDraggingId(source); reorder(item.id); setDraggingId(null); } }}>
+    <span className="playlist-drag-handle" aria-hidden="true">⠿</span>
+    <span className={`playlist-status ${isDecrypted ? 'decrypted' : 'encrypted'}`} title={isDecrypted ? 'Decrypted' : 'Encrypted'}>{isDecrypted ? '🔓' : '🔒'}</span>
+    <span className="playlist-name">{item.originalName}</span>
+    {isDecrypting && <span className="playlist-live-status" title={`Decrypting · ${ringProgress}%`} aria-label={`Decrypting ${ringProgress}%`}><svg className="playlist-progress-ring" viewBox="0 0 20 20" aria-hidden="true"><circle className="playlist-progress-track" cx="10" cy="10" r="8" /><circle className="playlist-progress-value" cx="10" cy="10" r="8" style={{ strokeDasharray: ringCircumference, strokeDashoffset: ringCircumference * (1 - ringProgress / 100) }} /></svg></span>}
+    {decryptJob?.status === 'error' && <span className="playlist-live-status error">Could not decrypt</span>}
+    <button className="playlist-remove" type="button" title="Remove" aria-label={`Remove ${item.originalName}`} disabled={item.id === currentVideoId} onClick={(event) => { event.stopPropagation(); const next = playlist.filter((entry) => entry.id !== item.id); setPlaylist(next, next.findIndex((entry) => entry.id === currentVideoId)); }}>×</button>
+  </div>;
 };
 
 export default VideoPlayer;

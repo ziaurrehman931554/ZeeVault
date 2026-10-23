@@ -10,6 +10,9 @@ interface SettingsStore extends AppSettings {
   setAccentColor: (accentColor: AppSettings['accentColor']) => void;
   setAccentCustom: (accentCustom: string) => void;
   setVideoCardSize: (videoCardSize: VideoCardSize) => void;
+  setVideoThumbnails: (value: boolean) => void;
+  setEncryptedVideoThumbnails: (value: boolean) => void;
+  setPhotoThumbnails: (value: boolean) => void;
   setAutoplay: (autoplay: boolean) => void;
   setDefaultSpeed: (defaultSpeed: number) => void;
   setAutoPlayNext: (autoPlayNext: boolean) => void;
@@ -39,6 +42,9 @@ const sanitizeSettings = (raw: any): AppSettings => {
   if (raw.videoCardSize === 'small' || raw.videoCardSize === 'medium' || raw.videoCardSize === 'large') {
     base.videoCardSize = raw.videoCardSize;
   }
+  if (typeof raw.videoThumbnails === 'boolean') base.videoThumbnails = raw.videoThumbnails;
+  if (typeof raw.encryptedVideoThumbnails === 'boolean') base.encryptedVideoThumbnails = raw.encryptedVideoThumbnails;
+  if (typeof raw.photoThumbnails === 'boolean') base.photoThumbnails = raw.photoThumbnails;
   if (raw.autoplay === true || raw.autoplay === false) base.autoplay = raw.autoplay;
   if (typeof raw.defaultSpeed === 'number' && raw.defaultSpeed > 0) base.defaultSpeed = raw.defaultSpeed;
   if (raw.autoPlayNext === true || raw.autoPlayNext === false) base.autoPlayNext = raw.autoPlayNext;
@@ -67,6 +73,9 @@ const toPlainSettings = (settings: AppSettings): AppSettings => ({
   accentColor: settings.accentColor,
   accentCustom: settings.accentCustom,
   videoCardSize: settings.videoCardSize,
+  videoThumbnails: settings.videoThumbnails,
+  encryptedVideoThumbnails: settings.encryptedVideoThumbnails,
+  photoThumbnails: settings.photoThumbnails,
   autoplay: settings.autoplay,
   defaultSpeed: settings.defaultSpeed,
   autoPlayNext: settings.autoPlayNext,
@@ -117,6 +126,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ videoCardSize });
     saveToDisk(get());
   },
+  setVideoThumbnails: (value) => { set({ videoThumbnails: value }); saveToDisk(get()); },
+  setEncryptedVideoThumbnails: (value) => { set({ encryptedVideoThumbnails: value }); saveToDisk(get()); },
+  setPhotoThumbnails: (value) => { set({ photoThumbnails: value }); saveToDisk(get()); },
   setAutoplay: (autoplay) => {
     set({ autoplay });
     saveToDisk(get());

@@ -32,10 +32,12 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
 }) => {
   const {
     userName, accentColor, accentCustom, videoCardSize,
+    videoThumbnails, encryptedVideoThumbnails, photoThumbnails,
     autoplay, defaultSpeed, autoPlayNext,
     notifyVideosFound, notifyDecrypt, notifyCache, notifyOther,
     windowMaterial, materialIntensity, backdropOpacity,
     setUserName, setTheme, setAccentColor, setAccentCustom, setVideoCardSize,
+    setVideoThumbnails, setEncryptedVideoThumbnails, setPhotoThumbnails,
     setAutoplay, setDefaultSpeed, setAutoPlayNext,
     setNotifyVideosFound, setNotifyDecrypt, setNotifyCache, setNotifyOther,
     setWindowMaterial, setMaterialIntensity, setBackdropOpacity,
@@ -267,6 +269,30 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section className="settings-card">
+          {sectionTitle(
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="20" height="20">
+              <rect x="3" y="3" width="18" height="18" rx="3" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="M21 15l-5-5L5 21" />
+            </svg>,
+            'Thumbnails',
+            'Choose which media thumbnails appear in the gallery'
+          )}
+          <div className="settings-row">
+            <span className="settings-label">Video thumbnails</span>
+            <label className="settings-toggle"><input type="checkbox" checked={videoThumbnails} onChange={(e) => setVideoThumbnails(e.target.checked)} /><span className="settings-toggle-track" /></label>
+          </div>
+          <div className="settings-row">
+            <span className="settings-label">Encrypted video thumbnails</span>
+            <label className="settings-toggle"><input type="checkbox" checked={encryptedVideoThumbnails} onChange={(e) => setEncryptedVideoThumbnails(e.target.checked)} /><span className="settings-toggle-track" /></label>
+          </div>
+          <div className="settings-row">
+            <span className="settings-label">Photo thumbnails</span>
+            <label className="settings-toggle"><input type="checkbox" checked={photoThumbnails} onChange={(e) => setPhotoThumbnails(e.target.checked)} /><span className="settings-toggle-track" /></label>
           </div>
         </section>
 

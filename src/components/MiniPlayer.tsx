@@ -16,6 +16,8 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({ data }) => {
   const titleRef = useRef<HTMLSpanElement>(null);
   const titleWrapRef = useRef<HTMLDivElement>(null);
   const { setCurrentVideo, setVideoUrl, setMiniPlayer } = usePlayerStore();
+  const playlist = usePlayerStore((s) => s.playlist);
+  const playlistIndex = usePlayerStore((s) => s.playlistIndex);
   const { setCurrentScreen } = useAppStore();
 
   useEffect(() => {
@@ -103,6 +105,9 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({ data }) => {
             <span> / </span>
             <span>{formatTime(duration)}</span>
           </div>
+          {playlist.length > 0 && <div className="miniplayer-playlist-indicator" title={`Playlist · ${playlist.length} videos`}>
+            <span>♫ {playlistIndex + 1}/{playlist.length}</span><span className="miniplayer-next-title">{playlist[playlistIndex + 1]?.originalName || 'End of playlist'}</span>
+          </div>}
           <div className="miniplayer-seek-track">
             <div className="miniplayer-seek-played" style={{ width: `${progress}%` }} />
           </div>

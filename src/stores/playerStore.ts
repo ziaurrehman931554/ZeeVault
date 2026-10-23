@@ -29,6 +29,11 @@ export const usePlayerStore = create<PlayerState & {
   setDecryptProgress: (progress: number) => void;
   setVideoUrl: (url: string | null) => void;
   miniPlayer: MiniPlayerData | null;
+  playlist: VideoItem[];
+  playlistIndex: number;
+  playlistActive: boolean;
+  setPlaylist: (items: VideoItem[], index?: number) => void;
+  setPlaylistIndex: (index: number) => void;
   setMiniPlayer: (data: MiniPlayerData | null) => void;
   reset: () => void;
 } & SubtitleState>((set) => ({
@@ -37,6 +42,9 @@ export const usePlayerStore = create<PlayerState & {
   decryptProgress: 0,
   videoUrl: null,
   miniPlayer: null,
+  playlist: [],
+  playlistIndex: -1,
+  playlistActive: false,
 
   tracks: [],
   activeTrackId: null,
@@ -56,6 +64,8 @@ export const usePlayerStore = create<PlayerState & {
   setDecryptProgress: (progress) => set({ decryptProgress: progress }),
   setVideoUrl: (url) => set({ videoUrl: url }),
   setMiniPlayer: (data) => set({ miniPlayer: data }),
+  setPlaylist: (items, index = 0) => set({ playlist: items, playlistIndex: index, playlistActive: items.length > 0 }),
+  setPlaylistIndex: (index) => set({ playlistIndex: index }),
 
   setTracks: (tracks) => set({ tracks }),
   addTrack: (track) => set((state) => ({ tracks: [...state.tracks, track] })),
@@ -74,6 +84,9 @@ export const usePlayerStore = create<PlayerState & {
       decryptProgress: 0,
       videoUrl: null,
       miniPlayer: null,
+      playlist: [],
+      playlistIndex: -1,
+      playlistActive: false,
       tracks: [],
       activeTrackId: null,
       enabled: true,

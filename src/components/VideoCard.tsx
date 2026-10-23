@@ -8,6 +8,11 @@ interface VideoCardProps {
   onPlay: (video: VideoItem) => void;
   onClear: (video: VideoItem) => void;
   onViewImage: (video: VideoItem) => void;
+  selected?: boolean;
+  onSelect?: (video: VideoItem, additive: boolean) => void;
+  playlistMiniMode?: boolean;
+  onQueueVideo?: (video: VideoItem, placement: 'next' | 'last') => void;
+  showThumbnail?: boolean;
 }
 
 const formatDuration = (duration?: string | number): string => {
@@ -40,6 +45,11 @@ const VideoCard: React.FC<VideoCardProps> = ({
   onPlay,
   onClear,
   onViewImage,
+  selected = false,
+  onSelect,
+  playlistMiniMode = false,
+  onQueueVideo,
+  showThumbnail = true,
 }) => {
   const status = job?.status ?? 'idle';
   const progress = job?.progress ?? 0;
@@ -47,11 +57,11 @@ const VideoCard: React.FC<VideoCardProps> = ({
   const isEncrypted = video.encrypted;
 
   return (
-    <article className={`video-card status-${status} type-${isImage ? 'image' : 'video'}`}>
+    <article className={`video-card status-${status} type-${isImage ? 'image' : 'video'}${selected ? ' selected' : ''}`} onClick={(event) => { if (!(event.target as HTMLElement).closest('button')) onSelect?.(video, event.ctrlKey || event.metaKey); }}>
       <div className="thumbnail">
         <div className="thumbnail-glow" />
 
-        {video.thumbnailUrl ? (
+        {showThumbnail && video.thumbnailUrl ? (
           <img
             src={video.thumbnailUrl}
             alt={video.originalName}
@@ -74,10 +84,10 @@ const VideoCard: React.FC<VideoCardProps> = ({
         )}
 
         {isEncrypted && (
-          <div className="encrypted-badge" title="Encrypted">
+          <div className={`encrypted-badge${status === 'ready' ? ' is-decrypted' : ''}`} title={status === 'ready' ? 'Decrypted and ready' : 'Encrypted'}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="14" height="14">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0110 0v4" />
+              {status === 'ready' ? <path d="M7 11V7a5 5 0 019-3" /> : <path d="M7 11V7a5 5 0 0110 0v4" />}
             </svg>
           </div>
         )}
@@ -111,7 +121,7 @@ const VideoCard: React.FC<VideoCardProps> = ({
           )}
         </div>
 
-        <div className="card-actions">
+        <div className={`card-actions${playlistMiniMode && !isImage ? ' playlist-mini-actions' : ''}`}>
           {isImage && !isEncrypted && (
             <button type="button" className="play-button" onClick={() => onViewImage(video)}>
               <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
@@ -153,6 +163,10 @@ const VideoCard: React.FC<VideoCardProps> = ({
               {status === 'decrypting' ? 'Decrypting' : isEncrypted ? 'Decrypt' : 'Play'}
             </button>
           )}
+          {!isImage && playlistMiniMode && <div className="playlist-hover-actions">
+            <button type="button" className="play-button" onClick={() => onQueueVideo?.(video, 'next')}>Play next</button>
+            <button type="button" className="play-button" onClick={() => onQueueVideo?.(video, 'last')}>Play last</button>
+          </div>}
         </div>
         {status === 'error' && <small>{job?.error || 'Failed'}</small>}
       </div>

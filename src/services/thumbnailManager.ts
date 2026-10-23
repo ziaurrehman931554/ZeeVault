@@ -4,14 +4,17 @@ import { CryptoService } from './cryptoService';
 export async function decryptAllThumbnails(
   videos: VideoItem[],
   password: string,
-  folderPath?: string
+  folderPath?: string,
+  options: { encryptedVideos: boolean; photos: boolean } = { encryptedVideos: true, photos: true }
 ): Promise<VideoItem[]> {
   const updated = [...videos];
 
   for (let i = 0; i < updated.length; i++) {
     const video = updated[i];
     if (folderPath && video.folderPath !== folderPath) continue;
-    if (video.thumbnailEncrypted && password) {
+    const isImage = video.mediaType === 'encrypted_image' || video.mediaType === 'unencrypted_image';
+    if (isImage ? !options.photos : !options.encryptedVideos) continue;
+    if (video.thumbnailEncrypted && !video.thumbnailUrl && password) {
       const url = CryptoService.decryptThumbnail(video.thumbnailEncrypted, password);
       if (url) {
         updated[i] = { ...video, thumbnailUrl: url };

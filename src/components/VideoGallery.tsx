@@ -15,6 +15,7 @@ interface VideoGalleryProps {
     percent: number;
   };
   theme: ThemeMode;
+  showThemeToggle: boolean;
   folderPaths: string[];
   metas: Record<string, MetaFile | null>;
   passwords: Record<string, string>;
@@ -29,6 +30,9 @@ interface VideoGalleryProps {
   onVideoClear: (video: VideoItem) => void;
   onClearAllCache: () => void;
   onViewImage: (video: VideoItem) => void;
+  onStartPlaylist: (videos: VideoItem[]) => void;
+  playlistMiniMode: boolean;
+  onQueueVideo: (video: VideoItem, placement: 'next' | 'last') => void;
 }
 
 const FILTER_OPTIONS: { key: FilterType; label: string }[] = [
@@ -51,6 +55,7 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
   decryptJobs,
   collectiveProgress,
   theme,
+  showThemeToggle,
   folderPaths,
   metas,
   passwords,
@@ -65,11 +70,20 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
   onVideoClear,
   onClearAllCache,
   onViewImage,
+  onStartPlaylist,
+  playlistMiniMode,
+  onQueueVideo,
 }) => {
   const navigate = useNavigate();
   const { videos, filterType, sortField, sortAscending, setFilterType, setSortField, setSortAscending } = useAppStore();
   const [search, setSearch] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const activePlaylistItemId = usePlayerStore((s) => s.playlist[s.playlistIndex]?.id);
+  const videoThumbnails = useSettingsStore((s) => s.videoThumbnails);
+  const encryptedVideoThumbnails = useSettingsStore((s) => s.encryptedVideoThumbnails);
+  const photoThumbnails = useSettingsStore((s) => s.photoThumbnails);
+  const playlistPreparing = playlistMiniMode && Boolean(activePlaylistItemId && decryptJobs[activePlaylistItemId]?.status === 'decrypting');
   const searchRef = useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
@@ -97,6 +111,12 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClearAllCache]);
+
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setSelectedIds([]); };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, []);
 
   const filteredVideos = useMemo(() => {
     let result = [...videos];
@@ -202,7 +222,7 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
             active={collectiveProgress.active}
             onClearAllCache={onClearAllCache}
           />
-          <button className="icon-button" onClick={onThemeToggle} type="button" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+          {showThemeToggle && <button className="icon-button" onClick={onThemeToggle} type="button" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             {theme === 'dark' ? (
               <svg viewBox="0 0 24 24" className="theme-icon" aria-hidden="true">
                 <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
@@ -213,7 +233,7 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
                 <path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
               </svg>
             )}
-          </button>
+          </button>}
           <button className="icon-button" onClick={onOpenSettings} type="button" title="Settings">
             <svg viewBox="0 0 24 24" className="settings-icon" aria-hidden="true">
               <circle cx="12" cy="12" r="3" />
@@ -229,7 +249,7 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
         </div>
       </header>
 
-      <main className="gallery-main">
+      <main className="gallery-main" onClick={(event) => { if (!(event.target as HTMLElement).closest('.video-card')) setSelectedIds([]); }}>
         <div className="path-panel">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M3 7.5A2.5 2.5 0 015.5 5H10l2 2h6.5A2.5 2.5 0 0121 9.5v7A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5v-9z" />
@@ -303,6 +323,11 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
             <p className="eyebrow">Your Media</p>
             <h2>{filteredVideos.length} files{!!videoCount && ` (${videoCount} video${videoCount !== 1 ? 's' : ''})`}{!!imageCount && ` (${imageCount} image${imageCount !== 1 ? 's' : ''})`}</h2>
           </div>
+          <button type="button" className="playlist-start-btn" disabled={!videoCount || playlistMiniMode} onClick={() => {
+            const ordered = filteredVideos.filter(v => v.mediaType === 'encrypted_video' || v.mediaType === 'unencrypted_video');
+            const selected = selectedIds.length ? selectedIds.map(id => ordered.find(v => v.id === id)).filter((v): v is VideoItem => Boolean(v)) : ordered;
+            if (selected.length) onStartPlaylist(selected);
+          }}>{playlistPreparing ? <><span className="loading-spinner playlist-button-spinner" /> Preparing playlist</> : playlistMiniMode ? <>▤ Playlist active</> : <>▶ {selectedIds.length ? `Play selection (${selectedIds.length})` : 'Play all videos'}</>}</button>
         </div>
 
         <div className="filter-bar">
@@ -356,11 +381,16 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
               <VideoCard
                 key={video.id}
                 video={video}
+                showThumbnail={video.mediaType.endsWith('_image') ? photoThumbnails : video.encrypted ? encryptedVideoThumbnails : videoThumbnails}
                 job={decryptJobs[video.id]}
                 onDecrypt={onVideoDecrypt}
                 onPlay={onVideoPlay}
                 onClear={onVideoClear}
                 onViewImage={onViewImage}
+                selected={selectedIds.includes(video.id)}
+                onSelect={(item, additive) => setSelectedIds((ids) => additive ? ids.includes(item.id) ? ids.filter(id => id !== item.id) : [...ids, item.id] : [item.id])}
+                playlistMiniMode={playlistMiniMode}
+                onQueueVideo={onQueueVideo}
               />
             ))}
           </div>
