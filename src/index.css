@@ -1,5 +1,28 @@
 @import "tailwindcss";
 
+.web {
+  scrollbar-width: none;
+}
+
+.web::-webkit-scrollbar,
+.web body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.web .app-shell {
+  --window-corner-radius: 0px;
+  border-radius: 0;
+  clip-path: none;
+}
+
+.web .topbar {
+  left: 0;
+  padding-left: clamp(16px, 3vw, 34px);
+  -webkit-app-region: auto;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -2536,6 +2559,91 @@ button:disabled {
 
   .gallery-heading h2 {
     font-size: 20px;
+  }
+}
+
+/* Browser layout adjustments for tablets and phones. */
+@media (max-width: 760px) {
+  .web .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .web .gallery-main {
+    padding: 16px clamp(12px, 3vw, 24px);
+  }
+
+  .web .video-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    gap: 14px;
+  }
+
+  .web .settings-page {
+    padding-left: clamp(12px, 3vw, 28px);
+    padding-right: clamp(12px, 3vw, 28px);
+  }
+
+  .web .settings-row {
+    gap: 12px;
+  }
+
+  .web .player-playlist {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    width: auto;
+    max-height: min(70dvh, 560px);
+  }
+}
+
+@media (max-width: 480px) {
+  .web .gallery-page {
+    padding-top: 64px;
+  }
+
+  .web .video-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .web .settings-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .web .settings-control,
+  .web .settings-segmented,
+  .web .accent-control {
+    width: 100%;
+  }
+
+  .web .settings-segmented {
+    flex-wrap: wrap;
+  }
+
+  .web .settings-folder-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .web .settings-folder-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .web .custom-player .top-bar,
+  .web .custom-player .bottom-bar {
+    gap: 6px;
+  }
+
+  .web .player-playlist {
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    max-height: 76dvh;
   }
 }
 

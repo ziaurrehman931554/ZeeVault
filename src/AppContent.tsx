@@ -82,6 +82,8 @@ const AppContent: React.FC = () => {
   const setSettingsTheme = useSettingsStore((s) => s.setTheme);
   const settingsHydrated = useSettingsStore((s) => s.hydrated);
   const [windowMaximized, setWindowMaximized] = useState(false);
+  const isElectronApp = Boolean((window as any).electronAPI);
+  const shellMaterial = isElectronApp ? settingsMaterial : 'solid';
 
   useEffect(() => {
     const api = (window as any).electronAPI;
@@ -279,6 +281,54 @@ const closeWindow = () => {
     }, [browserFiles]
   );
 
+  const getBrowserFile = useCallback((video: VideoItem): File => {
+    const normalizedPath = video.filePath.replace(/\\/g, '/');
+    const normalizedEncryptedName = video.encryptedName.replace(/\\/g, '/');
+    const encryptedSuffix = `/${normalizedEncryptedName}`.toLowerCase();
+    const file = browserFiles?.find((candidate) => {
+      const relativePath = (candidate.webkitRelativePath || candidate.name).replace(/\\/g, '/');
+      const lowerPath = relativePath.toLowerCase();
+      return lowerPath === normalizedPath.toLowerCase() || lowerPath.endsWith(encryptedSuffix) || lowerPath === normalizedEncryptedName.toLowerCase();
+    });
+    if (!file) throw new Error(`File not found: ${video.originalName}`);
+    return file;
+  }, [browserFiles]);
+
+  const createBrowserVideoUrl = useCallback(async (
+    video: VideoItem,
+    password: string | null,
+    onProgress?: (progress: number) => void,
+  ): Promise<string> => {
+    const file = getBrowserFile(video);
+    if (!password) {
+      onProgress?.(100);
+      return URL.createObjectURL(file);
+    }
+
+    const source = new Uint8Array(await file.arrayBuffer());
+    const chunks: Uint8Array[] = [];
+    const chunkSize = 4 * 1024 * 1024;
+    let processed = 0;
+    for (const chunk of CryptoService.xorDecryptChunked(source, password, chunkSize)) {
+      chunks.push(chunk);
+      processed += chunk.length;
+      onProgress?.(Math.max(1, Math.round((processed / source.length) * 100)));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    }
+    if (video.extension.toLowerCase() === 'ts') {
+      const bytes = new Uint8Array(source.length);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.length;
+      }
+      return (await createMseBlob(bytes)).url;
+    }
+    const mimeType = CryptoService.getMimeType(video.originalName);
+    const decrypted = new Blob(chunks.map((chunk) => chunk.buffer as ArrayBuffer), { type: mimeType });
+    return URL.createObjectURL(decrypted);
+  }, [getBrowserFile]);
+
   const readVideoFileChunk = useCallback(
     async (_filePath: string, offset: number, length: number): Promise<{ done: boolean; data: ArrayBuffer | null }> => {
       const api = (window as any).electronAPI;
@@ -394,6 +444,37 @@ const closeWindow = () => {
     try {
       const isImage = video.mediaType === 'encrypted_image' || video.mediaType === 'unencrypted_image';
 
+      if (!(window as any).electronAPI) {
+        const url = await createBrowserVideoUrl(video, video.encrypted ? pwd : null, (progress) => {
+          setDecryptProgress(progress);
+          updateDecryptJobs((jobs) => ({ ...jobs, [video.id]: { status: 'decrypting', progress } }));
+        });
+        decryptedUrl = url;
+        updateDecryptJobs((jobs) => rememberReadyVideo(jobs, video.id, { status: 'ready', progress: 100, url }));
+        const playerState = usePlayerStore.getState();
+        const selectedPlaylistItem = playerState.playlistActive
+          && playerState.currentVideo?.id === video.id
+          && playerState.playlist[playerState.playlistIndex]?.id === video.id;
+        const shouldOpen = !background || selectedPlaylistItem;
+        if (shouldOpen) {
+          setIsDecrypting(false);
+          setDecryptProgress(100);
+        }
+        if (!background) notify(`Ready: ${video.originalName}`, 'success');
+        if ((video.mediaType === 'unencrypted_video' || video.mediaType === 'encrypted_video') && shouldOpen) {
+          setVideoUrl(url);
+          if (video.encrypted) setCurrentVideo(video);
+          useAppStore.setState({ currentScreen: 'player' });
+          navigate(`/app/view/${encodeURIComponent(video.id)}`);
+        } else if (isImage && !background) {
+          const state = useAppStore.getState();
+          const allImages = state.videos.filter((item) => item.mediaType === 'encrypted_image' || item.mediaType === 'unencrypted_image');
+          const index = allImages.findIndex((item) => item.id === video.id);
+          useAppStore.getState().setImageViewer({ items: allImages, currentIndex: Math.max(0, index), visible: true });
+        }
+        return;
+      }
+
       if (!video.encrypted) {
         const mimeType = CryptoService.getMimeType(video.originalName);
         const { url } = await CryptoService.streamToBlobUrl(
@@ -497,9 +578,13 @@ const closeWindow = () => {
       }
 
       const playerState = usePlayerStore.getState();
-      const isSelectedPlaylistItem = playerState.playlistActive
-        ? playerState.currentVideo?.id === video.id && playerState.playlist[playerState.playlistIndex]?.id === video.id
-        : true;
+      // A foreground decrypt request should always open its requested video.
+      // Only background prefetches are gated by the active playlist selection.
+      const isSelectedPlaylistItem = !background || (
+        playerState.playlistActive
+        && playerState.currentVideo?.id === video.id
+        && playerState.playlist[playerState.playlistIndex]?.id === video.id
+      );
       if (isSelectedPlaylistItem) {
         setIsDecrypting(false);
         setDecryptProgress(100);
@@ -540,7 +625,7 @@ const closeWindow = () => {
     } finally {
       decryptingIdsRef.current.delete(video.id);
     }
-  }, [notify, readVideoFile, rememberReadyVideo, setCurrentVideo, setDecryptProgress, setIsDecrypting, updateDecryptJobs, setVideoUrl, navigate]);
+  }, [notify, readVideoFile, rememberReadyVideo, setCurrentVideo, setDecryptProgress, setIsDecrypting, updateDecryptJobs, setVideoUrl, navigate, createBrowserVideoUrl]);
 
   const handleUnlockFolder = useCallback((folderPath: string) => {
     setPendingUnlockFolder(folderPath);
@@ -817,6 +902,12 @@ const closeWindow = () => {
   }, [pendingDecryptVideo, pendingUnlockFolder, setPasswordForFolder, setVideos, setThumbnailsReady, notify, decryptSingleVideo, showEncryptedVideoThumbnails, showPhotoThumbnails]);
 
   const handleVideoDecrypt = useCallback((video: VideoItem) => {
+    // Decrypt from a gallery card is a single-video action in Electron. Clear
+    // any retained queue before decryptSingleVideo decides whether to enter
+    // playlist playback.
+    if ((window as any).electronAPI) {
+      usePlayerStore.getState().setPlaylist([], -1);
+    }
     void decryptSingleVideo(video);
   }, [decryptSingleVideo]);
 
@@ -869,13 +960,11 @@ const closeWindow = () => {
     setIsDecrypting(true);
     try {
       const mimeType = CryptoService.getMimeType(video.originalName);
-      const { url } = await CryptoService.streamToBlobUrl(
-        video.filePath, null, mimeType, readVideoFileChunk,
-        (done, total) => {
-          const progress = Math.max(1, Math.round((done / total) * 100));
-          setDecryptProgress(progress);
-        }
-      );
+      const url = (window as any).electronAPI
+        ? (await CryptoService.streamToBlobUrl(video.filePath, null, mimeType, readVideoFileChunk, (done, total) => {
+            setDecryptProgress(Math.max(1, Math.round((done / total) * 100)));
+          })).url
+        : await createBrowserVideoUrl(video, null, setDecryptProgress);
 
       updateDecryptJobs((jobs) =>
         rememberReadyVideo(jobs, video.id, { status: 'ready', progress: 100, url })
@@ -892,11 +981,16 @@ const closeWindow = () => {
       if (!playlistMode || player.currentVideo?.id === video.id) setIsDecrypting(false);
       if (!playlistMode || player.currentVideo?.id === video.id) notify(`Failed to play: ${video.originalName}`, 'error');
     }
-  }, [readVideoFileChunk, rememberReadyVideo, setCurrentVideo, setVideoUrl, setIsDecrypting, navigate, notify]);
+  }, [readVideoFileChunk, rememberReadyVideo, setCurrentVideo, setVideoUrl, setIsDecrypting, navigate, notify, createBrowserVideoUrl]);
 
-  const handleVideoPlay = useCallback((video: VideoItem) => {
+  const handleVideoPlay = useCallback((video: VideoItem, fromPlaylist = false) => {
     const player = usePlayerStore.getState();
-    if (player.playlistActive) {
+    const electronSingleRequest = Boolean((window as any).electronAPI) && !fromPlaylist;
+    if (electronSingleRequest) player.setPlaylist([], -1);
+    const videoIsInActivePlaylist = !electronSingleRequest
+      && player.playlistActive
+      && player.playlist.some((item) => item.id === video.id);
+    if (videoIsInActivePlaylist) {
       const index = player.playlist.findIndex((item) => item.id === video.id);
       if (index >= 0) player.setPlaylistIndex(index);
       setCurrentVideo(video);
@@ -905,6 +999,8 @@ const closeWindow = () => {
       useAppStore.setState({ currentScreen: 'player' });
       navigate(`/app/view/${encodeURIComponent(video.id)}`);
       preparePlaylistBuffer(video);
+    } else if (player.playlistActive) {
+      player.setPlaylist([], -1);
     }
     if (!video.encrypted) {
       void playUnencryptedVideo(video);
@@ -934,7 +1030,7 @@ const closeWindow = () => {
       const next = player.playlist[index + 1];
       if (!next) return null;
       player.setPlaylistIndex(index + 1);
-      void handleVideoPlay(next);
+      void handleVideoPlay(next, true);
       return next;
     }
     const all = useAppStore.getState().videos;
@@ -957,12 +1053,12 @@ const closeWindow = () => {
       }
     }
     return null;
-  }, [decryptJobs, playUnencryptedVideo, setCurrentVideo, setVideoUrl, setIsDecrypting]);
+  }, [decryptJobs, handleVideoPlay, playUnencryptedVideo, setCurrentVideo, setVideoUrl, setIsDecrypting]);
 
   const startPlaylist = useCallback((items: VideoItem[]) => {
     if (!items.length) return;
     usePlayerStore.getState().setPlaylist(items, 0);
-    handleVideoPlay(items[0]);
+    handleVideoPlay(items[0], true);
   }, [handleVideoPlay]);
 
   const handlePlayPrevious = useCallback((from: VideoItem): VideoItem | null => {
@@ -972,7 +1068,7 @@ const closeWindow = () => {
     const previous = player.playlist[index - 1];
     if (!previous) return null;
     player.setPlaylistIndex(index - 1);
-    handleVideoPlay(previous);
+    handleVideoPlay(previous, true);
     return previous;
   }, [handleVideoPlay]);
 
@@ -988,7 +1084,7 @@ const closeWindow = () => {
     } else {
       player.setPlaylistIndex(target);
     }
-    handleVideoPlay(video);
+    handleVideoPlay(video, true);
   }, [handleVideoPlay]);
 
   const handleQueueVideo = useCallback((video: VideoItem, placement: 'next' | 'last') => {
@@ -1028,6 +1124,7 @@ const closeWindow = () => {
 
     readyOrderRef.current = [];
     const playerState = usePlayerStore.getState();
+    playerState.setPlaylist([], -1);
     if (playerState.videoUrl) setVideoUrl(null);
     if (playerState.miniPlayer) {
       URL.revokeObjectURL(playerState.miniPlayer.videoUrl);
@@ -1152,9 +1249,9 @@ const closeWindow = () => {
     return 'Enter the vault password to access encrypted content.';
   }, [pendingDecryptVideo, pendingUnlockFolder]);
 
-  const shellStyle = settingsMaterial === 'mica' || settingsMaterial === 'acrylic'
+  const shellStyle = shellMaterial === 'mica' || shellMaterial === 'acrylic'
     ? (() => {
-        const tints = materialTints(settingsMaterial, settingsTheme === 'light', settingsMaterialIntensity, settingsBackdropOpacity);
+        const tints = materialTints(shellMaterial, settingsTheme === 'light', settingsMaterialIntensity, settingsBackdropOpacity);
         return {
           ['--material-a' as any]: String(tints.a.toFixed(3)),
           ['--material-b' as any]: String(tints.b.toFixed(3)),
@@ -1166,14 +1263,14 @@ const closeWindow = () => {
 
   return (
     <div
-      className={`app-shell theme-${settingsTheme}${settingsMaterial !== 'solid' ? ` material-${settingsMaterial}` : ''}${windowMaximized ? ' window-maximized' : ''}`}
+      className={`app-shell theme-${settingsTheme}${shellMaterial !== 'solid' ? ` material-${shellMaterial}` : ''}${windowMaximized ? ' window-maximized' : ''}`}
       data-accent={settingsAccent}
       data-cardsize={settingsCardSize}
       style={shellStyle}
     >
       <CustomScrollbar />
 <div className="material-backdrop" />
-      <div className="window-controls" role="group" aria-label="Window controls">
+      {(window as any).electronAPI && <div className="window-controls" role="group" aria-label="Window controls">
         <button className="window-control close-control" type="button" onClick={closeWindow} aria-label="Close" title="Close">
           <span aria-hidden="true">&#215;</span>
         </button>
@@ -1199,7 +1296,7 @@ const closeWindow = () => {
         <button className="window-control minimize-control" type="button" onClick={minimizeWindow} aria-label="Minimize" title="Minimize">
           <span aria-hidden="true">&#8722;</span>
         </button>
-      </div>
+      </div>}
       <div className="ambient-shape shape-one" />
       <div className="ambient-shape shape-two" />
       <div className="ambient-shape shape-three" />
@@ -1233,7 +1330,7 @@ const closeWindow = () => {
           decryptJobs={decryptJobs}
           collectiveProgress={collectiveProgress}
           theme={settingsTheme}
-          showThemeToggle={settingsMaterial === 'solid'}
+          showThemeToggle={shellMaterial === 'solid'}
           folderPaths={folderPaths}
           metas={metas}
           passwords={passwords}

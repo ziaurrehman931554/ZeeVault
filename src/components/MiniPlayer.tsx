@@ -15,7 +15,7 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({ data }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const titleRef = useRef<HTMLSpanElement>(null);
   const titleWrapRef = useRef<HTMLDivElement>(null);
-  const { setCurrentVideo, setVideoUrl, setMiniPlayer } = usePlayerStore();
+  const { setCurrentVideo, setVideoUrl, setMiniPlayer, setPlaylist } = usePlayerStore();
   const playlist = usePlayerStore((s) => s.playlist);
   const playlistIndex = usePlayerStore((s) => s.playlistIndex);
   const { setCurrentScreen } = useAppStore();
@@ -54,8 +54,9 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({ data }) => {
 
   const dismissMiniPlayer = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    setPlaylist([], -1);
     setMiniPlayer(null);
-  }, [setMiniPlayer]);
+  }, [setMiniPlayer, setPlaylist]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {

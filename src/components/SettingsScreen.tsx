@@ -30,6 +30,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onRemoveFolder,
   onAddFolders,
 }) => {
+  const isElectron = Boolean((window as any).electronAPI);
   const {
     userName, accentColor, accentCustom, videoCardSize,
     videoThumbnails, encryptedVideoThumbnails, photoThumbnails,
@@ -143,6 +144,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </div>
           </div>
 
+          {isElectron && <>
           <div className="settings-row">
             <span className="settings-label">Window style</span>
             <div className="settings-segmented">
@@ -207,6 +209,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
               </div>
             </div>
           )}
+          </>}
 
           <div className="settings-row">
             <span className="settings-label">Accent color</span>

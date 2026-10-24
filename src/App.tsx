@@ -13,9 +13,8 @@ const isElectron = (): boolean => {
 
 const App: React.FC = () => {
   useEffect(() => {
-    if (isElectron()) {
-      document.documentElement.classList.add('electron');
-    }
+    document.documentElement.classList.toggle('electron', isElectron());
+    document.documentElement.classList.toggle('web', !isElectron());
   }, []);
 
   return (
