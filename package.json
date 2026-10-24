@@ -1,6 +1,6 @@
 {
   "name": "zeevault",
-  "version": "2.0.0",
+  "version": "2.1.1",
   "description": "An encrypted video locker app that securely stores, manages, and plays your personal video collection.",
   "author": "ZeeVault",
   "private": true,
