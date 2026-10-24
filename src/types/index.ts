@@ -15,6 +15,7 @@ export interface MetaVideoEntry {
   name?: string;
   originalName?: string;
   filename?: string;
+  originalRelativePath?: string;
   duration?: string | number;
   dateAdded?: string;
   dateModified?: string;
@@ -120,7 +121,7 @@ export interface NotificationItem {
 }
 
 export interface AppState {
-  currentScreen: 'login' | 'gallery' | 'player' | 'settings';
+  currentScreen: 'login' | 'gallery' | 'player' | 'settings' | 'file-tools';
   folderPaths: string[];
   passwords: Record<string, string>;
   metas: Record<string, MetaFile | null>;

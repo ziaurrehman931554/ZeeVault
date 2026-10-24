@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
-    "dev:electron": "wait-on http://localhost:5173 && electron .",
+    "dev:electron": "npm run build:electron && wait-on http://localhost:5173 && electron .",
     "build": "vite build",
     "build:electron": "tsc --ignoreConfig src/main.ts --outDir dist-electron --target es2020 --module esnext --moduleResolution bundler --allowSyntheticDefaultImports --esModuleInterop && tsc --ignoreConfig src/preload.ts --outDir dist-electron --target es2020 --module commonjs --esModuleInterop",
     "preview": "vite preview",
@@ -51,6 +51,12 @@
     "files": [
       "dist",
       "dist-electron"
+    ],
+    "extraResources": [
+      {
+        "from": "ZeeVault.ps1",
+        "to": "ZeeVault.ps1"
+      }
     ],
     "directories": {
       "buildResources": "buildResources",

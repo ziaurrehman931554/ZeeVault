@@ -72,6 +72,36 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
             return [];
         }
     },
+    listVaultMediaFiles: async (folderPath) => {
+        try {
+            return await electron_1.ipcRenderer.invoke('listVaultMediaFiles', folderPath);
+        }
+        catch (error) {
+            console.error('Error in listVaultMediaFiles:', error);
+            return [];
+        }
+    },
+    encryptFolder: async (folderPath, password, includePortableScript = false) => {
+        try {
+            return await electron_1.ipcRenderer.invoke('encryptFolder', folderPath, password, includePortableScript);
+        }
+        catch (error) {
+            throw error;
+        }
+    },
+    decryptFolder: async (folderPath, password) => {
+        try {
+            return await electron_1.ipcRenderer.invoke('decryptFolder', folderPath, password);
+        }
+        catch (error) {
+            throw error;
+        }
+    },
+    onVaultOperationProgress: (callback) => {
+        const listener = (_event, progress) => callback(progress);
+        electron_1.ipcRenderer.on('vaultOperationProgress', listener);
+        return () => electron_1.ipcRenderer.removeListener('vaultOperationProgress', listener);
+    },
     getStoredFolderPath: async () => {
         try {
             return await electron_1.ipcRenderer.invoke('getStoredFolderPath');

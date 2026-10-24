@@ -7,10 +7,12 @@ import VideoGallery from './components/VideoGallery';
 import SettingsScreen from './components/SettingsScreen';
 import VideoPlayer from './components/VideoPlayer';
 import MiniPlayer from './components/MiniPlayer';
+import WebDesktopPromo from './components/WebDesktopPromo';
 import LockScreen from './components/LockScreen';
 import ImageViewer from './components/ImageViewer';
 import SubtitleSearchDialog from './components/SubtitleSearchDialog';
 import PasswordPrompt from './components/PasswordPrompt';
+import FileOperationsScreen from './components/FileOperationsScreen';
 import CustomScrollbar from './components/CustomScrollbar';
 import { DecryptJob, MetaFile, NotificationItem, VideoItem } from './types/index';
 import { CryptoService } from './services/cryptoService';
@@ -220,6 +222,10 @@ const closeWindow = () => {
 
   const closeSettings = useCallback(() => {
     setCurrentScreen('gallery');
+  }, [setCurrentScreen]);
+
+  const openFileOperations = useCallback(() => {
+    setCurrentScreen('file-tools');
   }, [setCurrentScreen]);
 
   const updateDecryptJobs = useCallback(
@@ -824,6 +830,67 @@ const closeWindow = () => {
     }, [notify]
   );
 
+  const refreshFolderAfterFileOperation = useCallback(async (folderPath: string) => {
+    const initialState = useAppStore.getState();
+    // File tools must never add a newly selected folder to the gallery pool.
+    // Existing pool entries can still be refreshed after encryption/decryption.
+    if (!initialState.folderPaths.includes(folderPath)) return;
+    const scannedFiles = await MediaScanner.scanFolderFiles(folderPath);
+    const rawMeta = await MediaScanner.readMetaContent(folderPath);
+    let meta: MetaFile | null = null;
+    let encryptedVideos: VideoItem[] = [];
+    if (rawMeta) {
+      const parsed = MediaScanner.parseMeta(rawMeta);
+      if (MediaScanner.isValidMetaFile(parsed)) {
+        meta = parsed;
+        const encryptedPathByName = new Map<string, string>();
+        for (const file of scannedFiles) {
+          if (!file.isEncrypted) continue;
+          encryptedPathByName.set(file.name.toLowerCase(), file.path);
+          const relativePath = file.path.slice(folderPath.length).replace(/^[/\\]+/, '').replace(/\\/g, '/').toLowerCase();
+          encryptedPathByName.set(relativePath, file.path);
+        }
+        encryptedVideos = MediaScanner.metaToEncryptedVideos(
+          parsed,
+          folderPath,
+          (encryptedName) => encryptedPathByName.get(encryptedName.replace(/\\/g, '/').toLowerCase())
+            ?? encryptedPathByName.get(encryptedName.split(/[\\/]/).pop()?.toLowerCase() ?? encryptedName.toLowerCase())
+            ?? `${folderPath}\\${encryptedName}`,
+        );
+      }
+    }
+    const unencryptedVideos = MediaScanner.scannedToUnencryptedVideos(scannedFiles, folderPath);
+    const refreshedVideos = MediaScanner.mergeMedia(encryptedVideos, unencryptedVideos);
+    const state = useAppStore.getState();
+    state.setMetas({ ...state.metas, [folderPath]: meta });
+    state.setVideos([
+      ...state.videos.filter((video) => video.folderPath !== folderPath),
+      ...refreshedVideos,
+    ]);
+    state.setThumbnailsReady(false);
+    updateDecryptJobs((jobs) => {
+      const next = { ...jobs };
+      state.videos.filter((video) => video.folderPath === folderPath).forEach((video) => {
+        const job = next[video.id];
+        if (job?.url) {
+          if (job._cleanup) job._cleanup();
+          else URL.revokeObjectURL(job.url);
+        }
+        delete next[video.id];
+      });
+      return next;
+    });
+    const playerState = usePlayerStore.getState();
+    if (playerState.currentVideo?.folderPath === folderPath) {
+      setVideoUrl(null);
+      setCurrentVideo(null);
+    }
+    if (playerState.miniPlayer?.currentVideo.folderPath === folderPath) {
+      URL.revokeObjectURL(playerState.miniPlayer.videoUrl);
+      playerState.setMiniPlayer(null);
+    }
+  }, [setCurrentVideo, setVideoUrl, updateDecryptJobs]);
+
   const handleAddFolders = useCallback(() => {
     const api = (window as any).electronAPI;
     if (api?.selectFolders) {
@@ -1339,6 +1406,8 @@ const closeWindow = () => {
           onRemoveFolder={handleRemoveFolder}
           onAddFolders={handleAddFolders}
           onOpenSettings={openSettings}
+          onOpenFileOperations={openFileOperations}
+          showFileOperations={isElectronApp}
           onThemeToggle={toggleTheme}
           onVideoDecrypt={handleVideoDecrypt}
           onVideoPlay={handleVideoPlay}
@@ -1363,6 +1432,9 @@ const closeWindow = () => {
           onAddFolders={handleAddFolders}
         />
       )}
+      {currentScreen === 'file-tools' && isElectronApp && (
+        <FileOperationsScreen onBack={closeSettings} onFolderChanged={refreshFolderAfterFileOperation} />
+      )}
       {currentScreen === 'player' && (
         <VideoPlayer
           videoUrl={videoUrl}
@@ -1382,6 +1454,7 @@ const closeWindow = () => {
         />
       )}
       {miniPlayer && currentScreen !== 'player' && <MiniPlayer data={miniPlayer} />}
+      {!isElectronApp && <WebDesktopPromo active={currentScreen === 'gallery'} lifted={Boolean(miniPlayer && currentScreen !== 'player')} />}
       <input
         ref={addFoldersInputRef}
         type="file"

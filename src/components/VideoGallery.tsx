@@ -24,6 +24,8 @@ interface VideoGalleryProps {
   onRemoveFolder: (folderPath: string) => void;
   onAddFolders: () => void;
   onOpenSettings: () => void;
+  onOpenFileOperations?: () => void;
+  showFileOperations?: boolean;
   onThemeToggle: () => void;
   onVideoDecrypt: (video: VideoItem) => void;
   onVideoPlay: (video: VideoItem) => void;
@@ -64,6 +66,8 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
   onRemoveFolder,
   onAddFolders,
   onOpenSettings,
+  onOpenFileOperations,
+  showFileOperations = false,
   onThemeToggle,
   onVideoDecrypt,
   onVideoPlay,
@@ -216,6 +220,10 @@ const VideoGallery: React.FC<VideoGalleryProps> = ({
 
         <div className="nav-actions">
           <span className="user-greeting" title="Signed in user">Welcome, {useSettingsStore((s) => s.userName)}</span>
+          {showFileOperations && <button className="icon-button file-operations-nav-button" onClick={onOpenFileOperations} type="button" title="Encrypt or decrypt files">
+            <svg viewBox="0 0 24 24" className="settings-icon" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 018 0v3M12 14v3" /></svg>
+            <span>File tools</span>
+          </button>}
           <CircularProgress
             percent={collectiveProgress.percent}
             label={`${collectiveProgress.done}/${collectiveProgress.requested || 0}`}

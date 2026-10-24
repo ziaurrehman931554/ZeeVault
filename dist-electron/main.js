@@ -2,6 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
+import { createHash, randomUUID, timingSafeEqual } from 'crypto';
+import { execFile } from 'child_process';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const getConfigPath = () => {
@@ -327,6 +329,8 @@ ipcMain.handle('fileExists', async (_event, filePath) => {
 });
 const SUPPORTED_VIDEO = new Set(['.mp4', '.webm', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.mpeg', '.mpg', '.ogv', '.3gp', '.flv', '.ts']);
 const SUPPORTED_IMAGE = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp']);
+// Keep file operations aligned with the media extensions supported by ZeeVault.ps1.
+const SCRIPT_VIDEO_EXTENSIONS = new Set(['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.mpeg', '.mpg', '.ogv', '.3gp', '.flv', '.ts']);
 async function walkMediaFiles(dir, results) {
     let entries;
     try {
@@ -373,6 +377,162 @@ ipcMain.handle('listMediaFiles', async (_event, folderPath) => {
     catch (error) {
         console.error('Error listing media files:', error);
         return [];
+    }
+});
+ipcMain.handle('listVaultMediaFiles', async (_event, folderPath) => {
+    try {
+        const root = await ensureSelectedFolder(folderPath);
+        const entries = await fs.readdir(root, { withFileTypes: true });
+        const results = [];
+        for (const entry of entries) {
+            if (!entry.isFile())
+                continue;
+            const extension = path.extname(entry.name).toLowerCase();
+            const isEncrypted = extension === '.enc';
+            if (!isEncrypted && !SCRIPT_VIDEO_EXTENSIONS.has(extension) && !SUPPORTED_IMAGE.has(extension))
+                continue;
+            const fullPath = path.join(root, entry.name);
+            const stat = await fs.stat(fullPath).catch(() => null);
+            if (!stat)
+                continue;
+            results.push({ name: entry.name, path: fullPath, extension: isEncrypted ? 'enc' : extension.slice(1), size: stat.size, dateAdded: stat.birthtime.toISOString(), dateModified: stat.mtime.toISOString(), isEncrypted });
+        }
+        return results;
+    }
+    catch (error) {
+        console.error('Error listing vault media files:', error);
+        return [];
+    }
+});
+const emitVaultProgress = (progress) => {
+    if (!mainWindow || mainWindow.isDestroyed())
+        return;
+    mainWindow.webContents.send('vaultOperationProgress', progress);
+};
+const ensureSelectedFolder = async (folderPath) => {
+    if (typeof folderPath !== 'string' || !path.isAbsolute(folderPath)) {
+        throw new Error('Select a valid folder on this device.');
+    }
+    const resolved = path.resolve(folderPath);
+    const stat = await fs.stat(resolved);
+    if (!stat.isDirectory())
+        throw new Error('The selected path is not a folder.');
+    return resolved;
+};
+const passwordHash = (password) => createHash('sha256').update(password, 'utf8').digest('hex');
+const hashMatches = (password, storedHash) => {
+    const expected = String(storedHash || '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(expected))
+        return false;
+    return timingSafeEqual(Buffer.from(passwordHash(password), 'hex'), Buffer.from(expected, 'hex'));
+};
+const getVaultScriptPath = () => app.isPackaged
+    ? path.join(process.resourcesPath, 'ZeeVault.ps1')
+    : path.resolve(__dirname, '..', 'ZeeVault.ps1');
+const runVaultScript = (scriptPath, password) => new Promise((resolve, reject) => {
+    execFile('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], {
+        windowsHide: true,
+        env: { ...process.env, ZEEVAULT_PASSWORD: password },
+        maxBuffer: 1024 * 1024,
+    }, (error, _stdout, stderr) => {
+        if (!error)
+            return resolve();
+        const output = String(stderr || '').trim();
+        reject(new Error(output || 'The vault script could not complete. Check the password, media files, and PowerShell/FFmpeg availability.'));
+    });
+});
+const topLevelVaultFiles = async (root, predicate) => {
+    const entries = await fs.readdir(root, { withFileTypes: true });
+    return entries.filter((entry) => entry.isFile() && predicate(path.extname(entry.name).toLowerCase())).map((entry) => entry.name);
+};
+const readVaultManifest = async (root) => {
+    try {
+        return JSON.parse((await fs.readFile(path.join(root, 'vault.meta'), 'utf8')).replace(/^\uFEFF/, ''));
+    }
+    catch (error) {
+        if (error.code === 'ENOENT')
+            return null;
+        throw new Error('The existing vault.meta file is not valid JSON.');
+    }
+};
+ipcMain.handle('encryptFolder', async (_event, folderPath, password, includePortableScript = false) => {
+    const root = await ensureSelectedFolder(folderPath);
+    if (typeof password !== 'string' || !password.length)
+        throw new Error('Enter a password.');
+    const meta = await readVaultManifest(root);
+    if (meta) {
+        if (!['encrypted', 'decrypted'].includes(meta.state))
+            throw new Error('The vault.meta file has an unsupported state.');
+        if (!hashMatches(password, meta.password_hash))
+            throw new Error('Enter the password previously used for this folder.');
+    }
+    const mediaNames = await topLevelVaultFiles(root, (extension) => SCRIPT_VIDEO_EXTENSIONS.has(extension) || SUPPORTED_IMAGE.has(extension));
+    const encryptedNames = await topLevelVaultFiles(root, (extension) => extension === '.enc');
+    const trackedNames = new Set(Object.values(meta?.files || {}).map((entry) => (typeof entry === 'string' ? entry : entry?.originalName || '').toLowerCase()));
+    const sources = mediaNames.filter((name) => !trackedNames.has(name.toLowerCase()));
+    if (!sources.length)
+        throw new Error(encryptedNames.length ? 'This folder has no new media files to encrypt. Switch to the Decryption tab to restore its encrypted files.' : 'No supported media files were found in this folder.');
+    const sourceScript = getVaultScriptPath();
+    await fs.access(sourceScript);
+    const durableScript = path.join(root, 'ZeeVault.ps1');
+    let scriptPath = path.join(root, `.ZeeVault-${randomUUID()}.ps1`);
+    let removeScriptAfter = true;
+    if (includePortableScript) {
+        try {
+            await fs.access(durableScript);
+            throw new Error('ZeeVault.ps1 already exists in the selected folder. Remove or rename it before adding the portable copy.');
+        }
+        catch (error) {
+            if (error instanceof Error && error.message.includes('already exists'))
+                throw error;
+            if (error.code !== 'ENOENT')
+                throw error;
+        }
+        scriptPath = durableScript;
+        removeScriptAfter = false;
+    }
+    await fs.copyFile(sourceScript, scriptPath);
+    try {
+        await runVaultScript(scriptPath, password);
+        return { success: true, count: sources.length };
+    }
+    catch (error) {
+        if (includePortableScript)
+            await fs.rm(durableScript, { force: true }).catch(() => undefined);
+        throw new Error(`Encryption failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    finally {
+        if (removeScriptAfter)
+            await fs.rm(scriptPath, { force: true }).catch(() => undefined);
+    }
+});
+ipcMain.handle('decryptFolder', async (_event, folderPath, password) => {
+    const root = await ensureSelectedFolder(folderPath);
+    if (typeof password !== 'string' || !password.length)
+        throw new Error('Enter a password.');
+    const meta = await readVaultManifest(root);
+    if (!meta || meta.state !== 'encrypted' || !meta.files || typeof meta.files !== 'object') {
+        throw new Error('The selected folder does not contain an encrypted vault.meta manifest.');
+    }
+    if (!hashMatches(password, meta.password_hash))
+        throw new Error('The password is incorrect.');
+    const encryptedNames = await topLevelVaultFiles(root, (extension) => extension === '.enc');
+    if (!encryptedNames.length)
+        throw new Error('No encrypted files were found in this folder.');
+    const plainMedia = await topLevelVaultFiles(root, (extension) => SCRIPT_VIDEO_EXTENSIONS.has(extension) || SUPPORTED_IMAGE.has(extension));
+    if (plainMedia.length)
+        throw new Error('This folder also contains unencrypted media. Switch to the Encryption tab to add those files before decrypting the vault.');
+    const scriptPath = path.join(root, `.ZeeVault-${randomUUID()}.ps1`);
+    await fs.copyFile(getVaultScriptPath(), scriptPath);
+    try {
+        await runVaultScript(scriptPath, password);
+        return { success: true, count: Object.keys(meta.files).length };
+    }
+    catch (error) {
+        throw new Error(`Decryption failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    finally {
+        await fs.rm(scriptPath, { force: true }).catch(() => undefined);
     }
 });
 ipcMain.handle('getStoredFolderPath', async () => {
